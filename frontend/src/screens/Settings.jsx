@@ -752,6 +752,13 @@ export default function Settings() {
           flash(data.inherited ? 'Key works — the owner’s Apify key, shared with you' : `Key works — Apify account ${data.username}`)
         }),
       ]],
+      ['dorks', '', 'Search Dorks', '', [
+        SEL('Provider', 'Where Search Dorks sends its queries.', 'dork_search_provider',
+          [['serper', 'Serper (Google)'], ['brave', 'Brave Search']], { w: '260px', dflt: 'serper' }),
+        B('Search API key', 'Used by Search Dorks. The provider bills this account for each query.', 'dork_search_api_key',
+          { secret: true, mono: true, w: '340px', placeholder: 'your API key',
+            info: 'Serper keys come from serper.dev; Brave keys come from api.search.brave.com. The key is stored in your database and never sent back to the browser. Each account has its own key; a member who inherits this section runs on the owner’s key, and the owner’s provider account pays. New and copied dork searches start paused so they cannot spend credits unasked.' }),
+      ]],
       ['jobright', '', 'Jobright.ai', '', [
         B('Email', 'Your Jobright account.', 'jobright_email', { w: '260px' }),
         B('Password', 'Stored locally.', 'jobright_password', { secret: true, w: '260px' }),

@@ -46,6 +46,9 @@ DEFAULT_SETTINGS = {
     "jobright_session_obtained_at": ("", "UTC ISO timestamp of the last successful Jobright login. Read-only; set by the scraper."),
     # Billed per result by Apify; `_api_key` suffix keeps it redacted on GET /settings.
     "apify_api_key": ("", "Apify API token for the Apify search mode"),
+    # Dorks bill per query; the key is account-scoped and redacted on GET like apify_api_key.
+    "dork_search_provider": ("serper", "Search Dorks provider: serper or brave"),
+    "dork_search_api_key": ("", "Search Dorks API key for the selected provider"),
     "reject_cron": ("0 4 * * *", "Auto-reject cron (min hour day month dow). Empty = disabled"),
     "dedup_copy_link": ("ignored", "A copy of a posting under another link in the same city: ignored or new"),
     "dedup_copy_city": ("ignored", "A copy of a posting or role in another city: ignored or new"),

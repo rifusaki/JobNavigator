@@ -88,6 +88,8 @@ SEARCH_MODES: dict[str, SearchMode] = {m.key: m for m in (
     SearchMode("eluta", "Eluta", "eluta", background_test=True, needs_term=True),
     SearchMode("latam", "LatAm boards", "latam", background_test=True, uses_country=True,
                boards="latam", needs_term=True),
+    # Dorks bill per query and start paused: a copied search should not spend credits unasked.
+    SearchMode("dorks", "Search Dorks", "dorks", background_test=True, needs_term=True, paid=True),
     SearchMode("linkedin_extension", "LinkedIn Extension", extension=True),
     SearchMode("extension", "Extension", extension=True),
 )}

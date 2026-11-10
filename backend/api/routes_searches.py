@@ -304,10 +304,11 @@ def update_search(search_id: str, updates: dict, db: Session = Depends(get_db)):
             rw = updates.get("results_wanted", search.results_wanted)
             if rw is not None:
                 updates["results_wanted"] = clamp_results(rw)
-        # Switching an existing search to the paid source pauses it too, unless the
-        # patch sets `active` itself (same rule as a new Apify search).
-        if switching and "active" not in updates:
-            updates["active"] = False
+    # Switching an existing search to any paid source pauses it too, unless the patch
+    # sets `active` itself (same rule as a new paid search). `boards` is None for Dorks,
+    # so this cannot live in the Apify block above.
+    if mode is not None and mode.paid and switching_mode and "active" not in updates:
+        updates["active"] = False
     for key, value in updates.items():
         if key in allowed:
             setattr(search, key, value)
