@@ -53,6 +53,9 @@ from backend.scraper._shared.postings import (
     (["https://explore.jobs.netflix.net/careers/job/790314668577?microsite=netflix.com",
       "https://netflix.eightfold.ai/careers?pid=790314668577"], "eightfold:netflix:790314668577"),
     (["https://paypal.eightfold.ai/careers?pid=274922421537"], "eightfold:paypal:274922421537"),
+    # Mercado Libre wraps Eightfold on its own domain, keyed by the Eightfold tenant
+    (["https://careers-meli.mercadolibre.com/es/careers?pid=1234567890",
+      "https://mercadolibre.eightfold.ai/careers?pid=1234567890"], "eightfold:mercadolibre:1234567890"),
     # hosted career platforms
     (["https://careers.ey.com/ey/job/Austin-Commercialization-Architect_Assistant-Director-TX-78701/1393883533/"],
      "successfactors:careers.ey.com:1393883533"),

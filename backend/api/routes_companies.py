@@ -37,6 +37,7 @@ def detect_scrape_type(url: str) -> str:
     from backend.scraper.ats.smartrecruiters import is_smartrecruiters as _is_smartrecruiters
     from backend.scraper.ats.meta import is_meta as _is_meta_careers
     from backend.scraper.ats.google import is_google as _is_google_careers
+    from backend.scraper.ats.eightfold import is_eightfold as _is_eightfold
     if _is_workday(url):
         return "Workday API"
     if _is_oracle_hcm(url):
@@ -60,6 +61,8 @@ def detect_scrape_type(url: str) -> str:
         return "Uber API"
     if _is_smartrecruiters(url):
         return "SmartRecruiters API"
+    if _is_eightfold(url):
+        return "Eightfold API"
     if _is_meta_careers(url):
         return "Meta Careers (Playwright)"
     if _is_google_careers(url):
@@ -540,6 +543,10 @@ async def test_scrape_company(company_id: str, db: Session = Depends(get_db)):
         is_google as _is_google_careers,
         scrape as _scrape_google_careers,
     )
+    from backend.scraper.ats.eightfold import (
+        is_eightfold as _is_eightfold,
+        scrape as _scrape_eightfold,
+    )
 
     urls = company.scrape_urls or []
     if not urls:
@@ -633,6 +640,12 @@ async def test_scrape_company(company_id: str, db: Session = Depends(get_db)):
                     all_jobs.extend(jobs)
                     all_rejected.extend(rejected)
                     urls_scraped.append(f"{target_url[:80]}... ({len(jobs)} found via Amazon API)")
+                    continue
+                if _is_eightfold(target_url):
+                    jobs, rejected = await _scrape_eightfold(target_url, debug=True)
+                    all_jobs.extend(jobs)
+                    all_rejected.extend(rejected)
+                    urls_scraped.append(f"{target_url[:80]}... ({len(jobs)} found via Eightfold API)")
                     continue
                 if _is_meta_careers(target_url):
                     jobs, rejected = await _scrape_meta_careers(target_url, browser=browser, debug=True)

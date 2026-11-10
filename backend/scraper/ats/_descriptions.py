@@ -248,19 +248,23 @@ async def _fetch_description_ats(url: str, job: dict = None) -> str | None:
                             return text[:30_000]
         return None
 
-    # ── Eightfold: {company}.eightfold.ai/careers/job/{id} or custom domains using Eightfold ──
-    # Known custom domains: apply.careers.microsoft.com, paypal.eightfold.ai, etc.
-    # API: GET https://{domain}/api/apply/v2/jobs/{id} → JSON with job_description (HTML)
-    eightfold_job_id = None
-    if _host_matches(url, "eightfold.ai") and "/job/" in parsed.path:
-        eightfold_job_id = parsed.path.rstrip("/").split("/")[-1]
-    elif _host_matches(url, "apply.careers.microsoft.com") and "/job/" in parsed.path:
-        eightfold_job_id = parsed.path.rstrip("/").split("/")[-1]
-    if eightfold_job_id:
-        api_url = f"{parsed.scheme}://{parsed.hostname}/api/apply/v2/jobs/{eightfold_job_id}"
+    # ── Eightfold: {tenant}.eightfold.ai/careers/job/{id}, /careers?pid={id}, or a
+    # custom-domain wrapper (careers-meli.mercadolibre.com) ──
+    # API: GET https://{host}/api/apply/v2/jobs/{id}?domain={domain} → job_description (HTML)
+    from backend.scraper.ats import eightfold as _eightfold
+    eightfold_job_id = _eightfold.posting_id(url)
+    eightfold_target = _eightfold.target(url)
+    if eightfold_target is None and _host_matches(url, "apply.careers.microsoft.com"):
+        # Microsoft's Eightfold wrapper is not a board this handler lists, but its
+        # posting pages expose the same description API.
+        eightfold_target = (parsed.hostname, "gcss.microsoft.com")
+    if eightfold_job_id and eightfold_target:
+        eightfold_host, eightfold_domain = eightfold_target
+        api_url = f"https://{eightfold_host}/api/apply/v2/jobs/{eightfold_job_id}"
         try:
             async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-                resp = await client.get(api_url, headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
+                resp = await client.get(api_url, params={"domain": eightfold_domain},
+                                        headers={"Accept": "application/json", "User-Agent": _USER_AGENT})
                 if resp.status_code == 200:
                     data = json.loads(resp.text)
                     desc_html = data.get("job_description", "")

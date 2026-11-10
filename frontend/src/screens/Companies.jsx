@@ -61,6 +61,10 @@ const pathHas = (url, ...needles) => {
   let p; try { p = new URL(url).pathname.toLowerCase() } catch { return false }
   return needles.some((n) => n && p.includes(n))
 }
+const isEightfoldPortal = (url) => {
+  let host; try { host = new URL(url).hostname.toLowerCase() } catch { return false }
+  return host.endsWith('.eightfold.ai') || ['careers-meli.mercadolibre.com', 'careers.mercadolibre.com', 'explore.jobs.netflix.net'].includes(host)
+}
 // Mirrors backend/api/routes_companies.py:detect_scrape_type (and the scraper/ats/*.is_* predicates)
 // so the live chip in the drawer/add modal agrees with the row chip the backend computes.
 const detectAts = (url) => {
@@ -82,6 +86,7 @@ const detectAts = (url) => {
   // uber.is_uber: jobs.uber.com's job search, or the old uber.com careers list (not one posting)
   if (hostMatches(url, 'jobs.uber.com') && /^\/([a-z]{2}(-[a-z]{2})?\/)?jobs\/?$/i.test(new URL(url).pathname)) return 'Uber'
   if (hostMatches(url, 'uber.com') && pathHas(url, '/careers/list') && !/\/careers\/list\/\d+/.test(new URL(url).pathname)) return 'Uber'
+  if (isEightfoldPortal(url)) return 'Eightfold'
   if (hostMatches(url, 'metacareers.com')) return 'Meta'
   if (url.toLowerCase().includes('google.com/about/careers')) return 'Google'
   return 'Generic'

@@ -14,7 +14,7 @@ from backend.scraper._shared.filters import _apply_company_filters
 from backend.scraper._shared.dedup import make_external_id, make_content_hash, mark_ignored, _normalize_url
 from backend.scraper._shared.posting_links import counts_as_new
 from backend.scraper.ats import (
-    workday, greenhouse, lever, ashby, oracle_hcm,
+    workday, greenhouse, lever, ashby, oracle_hcm, eightfold,
     phenom, talentbrew, rippling, smartrecruiters, meta, google, amazon, uber, generic,
 )
 from backend.scraper.ats._descriptions import _fetch_descriptions_parallel
@@ -48,6 +48,8 @@ async def _dispatch_ats(url: str, debug: bool = False, shared_browser=None, max_
         return await amazon.scrape(url, debug=debug)
     if uber.is_uber(url):
         return await uber.scrape(url, debug=debug)
+    if eightfold.is_eightfold(url):
+        return await eightfold.scrape(url, debug=debug)
     if meta.is_meta(url):
         return await meta.scrape(url, browser=shared_browser, max_pages=max_pages, debug=debug)
     if google.is_google(url):
@@ -155,7 +157,8 @@ def _needs_browser(urls):
         if (phenom.is_phenom(u) or talentbrew.is_talentbrew(u) or oracle_hcm.is_oracle_hcm(u)
                 or lever.is_lever(u) or workday.is_workday(u) or ashby.is_ashby(u)
                 or greenhouse.is_greenhouse(u) or rippling.is_rippling(u)
-                or smartrecruiters.is_smartrecruiters(u) or amazon.is_amazon(u) or uber.is_uber(u)):
+                or smartrecruiters.is_smartrecruiters(u) or amazon.is_amazon(u) or uber.is_uber(u)
+                or eightfold.is_eightfold(u)):
             continue
         # Meta, Google, levels.fyi, or generic Playwright — needs browser
         return True
@@ -184,6 +187,7 @@ async def _fetch_postings(company, target_urls: list, browser) -> tuple[list, li
                     or greenhouse.is_greenhouse(target_url) or rippling.is_rippling(target_url)
                     or smartrecruiters.is_smartrecruiters(target_url)
                     or amazon.is_amazon(target_url) or uber.is_uber(target_url)
+                    or eightfold.is_eightfold(target_url)
                     or meta.is_meta(target_url) or google.is_google(target_url)):
                 page_jobs = await _dispatch_ats(target_url, debug=False, shared_browser=browser, max_pages=max_pages)
             else:

@@ -32,7 +32,8 @@ logger = logging.getLogger("jobnavigator.postings")
 # 8: a city named only in the text is a place word (same_role._CITIES) and a new place for a copy.
 # 9: ...a new place only when neither location names a city.
 # 10: jobs.uber.com keys as uber.com (Uber kept its ids); a job with no place is never elsewhere.
-READER_VERSION = 10
+# 11: Eightfold custom domains (careers-meli.mercadolibre.com) key by their tenant.
+READER_VERSION = 11
 
 _UUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 
@@ -219,7 +220,11 @@ def _ultipro(parsed, host, seg, qs):
 
 
 # White-labelled Eightfold sites, by the tenant name the eightfold.ai host uses.
-_EIGHTFOLD_HOSTS = {"explore.jobs.netflix.net": "netflix"}
+_EIGHTFOLD_HOSTS = {
+    "explore.jobs.netflix.net": "netflix",
+    "careers-meli.mercadolibre.com": "mercadolibre",
+    "careers.mercadolibre.com": "mercadolibre",
+}
 
 
 def _eightfold(parsed, host, seg, qs):

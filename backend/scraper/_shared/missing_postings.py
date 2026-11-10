@@ -19,11 +19,12 @@ REASON = "Not on the company's careers page in the last 2 scrapes"
 
 
 def _full_board(url: str) -> bool:
-    from backend.scraper.ats import (ashby, greenhouse, lever, oracle_hcm, phenom, rippling,
+    from backend.scraper.ats import (ashby, eightfold, greenhouse, lever, oracle_hcm, phenom, rippling,
                                      smartrecruiters, workday)
     return any(is_(url) for is_ in (greenhouse.is_greenhouse, lever.is_lever, ashby.is_ashby,
                                     rippling.is_rippling, smartrecruiters.is_smartrecruiters,
-                                    workday.is_workday, oracle_hcm.is_oracle_hcm, phenom.is_phenom))
+                                    workday.is_workday, oracle_hcm.is_oracle_hcm, phenom.is_phenom,
+                                    eightfold.is_eightfold))
 
 
 def is_full_scrape(target_urls, postings, url_errors) -> bool:
