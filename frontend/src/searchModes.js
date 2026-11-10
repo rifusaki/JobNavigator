@@ -14,6 +14,7 @@ export const SEARCH_MODES = [
   { key: 'creative', label: 'Creative boards', badge: 'CREATIVE', cls: 'sm-creative', extension: false, needsQuery: false, needsTerm: true, sources: ['behance', 'hollylist', 'wanacreate', 'dribbble', 'artstation', 'workwithindies'] },
   { key: 'himalayas', label: 'Himalayas', badge: 'HIMALAYAS', cls: 'sm-himalayas', extension: false, needsQuery: false, needsTerm: true, sources: [] },
   { key: 'eluta', label: 'Eluta', badge: 'ELUTA', cls: 'sm-eluta', extension: false, needsQuery: false, needsTerm: true, sources: [] },
+  { key: 'latam', label: 'LatAm boards', badge: 'LATAM', cls: 'sm-latam', extension: false, needsQuery: false, needsTerm: true, sources: ['getonbrd', 'computrabajo', 'elempleo'] },
   { key: 'linkedin_extension', label: 'LinkedIn Extension', badge: 'EXTENSION', cls: 'sm-extension', extension: true, needsQuery: false, needsTerm: false, sources: [] },
   { key: 'extension', label: 'Extension', badge: 'EXTENSION', cls: 'sm-extension', extension: true, needsQuery: false, needsTerm: false, sources: [] },
 ]

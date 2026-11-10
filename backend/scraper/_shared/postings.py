@@ -32,7 +32,8 @@ logger = logging.getLogger("jobnavigator.postings")
 # 8: a city named only in the text is a place word (same_role._CITIES) and a new place for a copy.
 # 9: ...a new place only when neither location names a city.
 # 10: jobs.uber.com keys as uber.com (Uber kept its ids); a job with no place is never elsewhere.
-# 11: Eightfold custom domains (careers-meli.mercadolibre.com) key by their tenant.
+# 11: Eightfold custom domains (careers-meli.mercadolibre.com) key by their tenant;
+#     Get on Board, Computrabajo and ElEmpleo links carry a posting key.
 READER_VERSION = 11
 
 _UUID = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
@@ -359,6 +360,38 @@ def _talentbrew(parsed, host, seg, qs):
     return None
 
 
+# Get on Board, Computrabajo and ElEmpleo list the posting under a slug or a trailing id.
+_GETONBRD_SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{2,}$", re.I)
+_COMPUTRABAJO_ID = re.compile(r"([0-9A-F]{8,}|[0-9]{6,})$", re.I)
+
+
+def _getonbrd(parsed, host, seg, qs):
+    if not _is(host, "getonbrd.com") or len(seg) < 2 or seg[0].lower() not in ("jobs", "empleos"):
+        return None
+    slug = seg[-1]
+    return f"getonbrd:{slug}" if _GETONBRD_SLUG.fullmatch(slug) else None
+
+
+def _computrabajo(parsed, host, seg, qs):
+    if not _is(host, "computrabajo.com") or not seg:
+        return None
+    last = seg[-1][:-5] if seg[-1].lower().endswith(".html") else seg[-1]
+    m = _COMPUTRABAJO_ID.search(last)
+    # A listing slug without its trailing id is not a stable posting identity.
+    return f"computrabajo:{m.group(1)}" if m else None
+
+
+def _elempleo(parsed, host, seg, qs):
+    if not _is(host, "elempleo.com"):
+        return None
+    for name in ("id", "oferta", "jobid", "idoferta"):
+        value = _first(qs, name)
+        if value and value.isdigit():
+            return f"elempleo:{value}"
+    tail = seg[-1] if seg else ""
+    return f"elempleo:{tail}" if tail.isdigit() else None
+
+
 def _big_boards(parsed, host, seg, qs):
     """The large first-party career sites the company scrapers read."""
     if host == "amazon.jobs" and "jobs" in seg:
@@ -417,11 +450,12 @@ def _indeed(parsed, host, seg, qs):
 
 
 _READERS = (_greenhouse, _lever, _ashby, _workday, _icims, _oracle, _smartrecruiters, _rippling,
-            _workable, _jobvite, _dayforce, _ultipro, _eightfold, _big_boards, _first_party,
-            _phenom, _adp, _linkedin, _indeed, _talentbrew, _hosted_ats, _career_platforms)
+            _workable, _jobvite, _dayforce, _ultipro, _eightfold, _getonbrd, _computrabajo,
+            _elempleo, _big_boards, _first_party, _phenom, _adp, _linkedin, _indeed, _talentbrew,
+            _hosted_ats, _career_platforms)
 
 # Keys that name the listing on a job board rather than the employer's own posting.
-BOARD_KEY_PREFIXES = ("linkedin:", "indeed:")
+BOARD_KEY_PREFIXES = ("linkedin:", "indeed:", "getonbrd:", "computrabajo:", "elempleo:")
 
 
 def posting_key(url) -> Optional[str]:

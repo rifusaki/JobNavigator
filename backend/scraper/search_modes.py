@@ -20,11 +20,13 @@ JOBSPY_DEFAULT_BOARDS = ["linkedin", "indeed", "zip_recruiter", "google"]
 LINKEDIN_COLLECTIONS = ("recommended", "top-applicant")
 CREATIVE_BOARDS = ("behance", "hollylist", "wanacreate", "dribbble", "artstation",
                    "workwithindies")    # sources/creative.py BOARDS
+LATAM_BOARDS = ("getonbrd", "computrabajo", "elempleo")    # sources/latam.py BOARDS
 # `sources` kind -> (allowed values, what they are called in an error)
 _BOARD_LISTS = {
     "jobspy": (JOBSPY_BOARDS, "JobSpy boards"),
     "collections": (LINKEDIN_COLLECTIONS, "LinkedIn collections"),
     "creative": (CREATIVE_BOARDS, "creative boards"),
+    "latam": (LATAM_BOARDS, "LatAm boards"),
 }
 
 
@@ -84,6 +86,8 @@ SEARCH_MODES: dict[str, SearchMode] = {m.key: m for m in (
     # Not shared yet either; their keys would be term + country and term + location.
     SearchMode("himalayas", "Himalayas", "himalayas", background_test=True, needs_term=True),
     SearchMode("eluta", "Eluta", "eluta", background_test=True, needs_term=True),
+    SearchMode("latam", "LatAm boards", "latam", background_test=True, uses_country=True,
+               boards="latam", needs_term=True),
     SearchMode("linkedin_extension", "LinkedIn Extension", extension=True),
     SearchMode("extension", "Extension", extension=True),
 )}
@@ -109,7 +113,7 @@ def default_sources(key) -> list:
         return []
     if mode.boards == "jobspy":
         return list(JOBSPY_DEFAULT_BOARDS)
-    if mode.boards in ("collections", "creative"):
+    if mode.boards in ("collections", "creative", "latam"):
         return list(_BOARD_LISTS[mode.boards][0])
     return []   # apify has no default board here: the client picks one (GET /searches/apify-boards)
 
@@ -150,5 +154,7 @@ def config_error(search) -> Optional[str]:
     if mode.needs_term and not (search.search_term or "").strip():
         return f"{mode.label} needs a search term before it can run"
     if mode.boards == "creative" and not any(s in CREATIVE_BOARDS for s in (search.sources or [])):
+        return f"{mode.label} needs at least one board before it can run"
+    if mode.boards == "latam" and not any(s in LATAM_BOARDS for s in (search.sources or [])):
         return f"{mode.label} needs at least one board before it can run"
     return None

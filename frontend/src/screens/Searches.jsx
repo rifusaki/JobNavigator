@@ -6,7 +6,7 @@ import { useToasts, ToastStack } from '../Toast'
 import ConfirmDialog from '../ConfirmDialog'
 import CopyFrom from '../CopyFrom'
 import { useSettled, useWarm, NBSP, DASH } from '../hooks'
-import { Button, Card, Check, CopyGlyph, Dot, FlaskGlyph, FooterRow, HeaderRow, Heading, Helper, IconButton, Input, Label, Link, Menu, MenuItem, ModalPanel, PageTitle, Pill, Rule, Segmented, Select, Spinner, TableHead, Tag } from '../ui'
+import { Button, Card, Check, CopyGlyph, Dot, FlaskGlyph, FooterRow, HeaderRow, Heading, Helper, IconButton, Input, Label, Link, Menu, MenuItem, ModalPanel, PageTitle, Pill, Rule, Segmented, Select, Spinner, TableHead, Tag, Textarea } from '../ui'
 import { BLOCKED_BADGE, MODE_BLOCKS, MODE_TERMS, SOURCE_BLOCKS } from '../sourceBlocks'
 import { useApifyBoards, boardLabel, testCost, usd } from '../apifyBoards'
 import { MODE_OPTIONS, defaultSources, isExtensionMode, isTestable, modeBadge, needsQuery, needsTerm } from '../searchModes'
@@ -94,6 +94,9 @@ const COLLECTIONS = [['recommended', 'Recommended'], ['top-applicant', 'Top Appl
 // backend/scraper/search_modes.py CREATIVE_BOARDS, same order
 const CREATIVE_BOARDS = [['behance', 'Behance'], ['hollylist', 'Hollylist'], ['wanacreate', 'Wana Create'], ['dribbble', 'Dribbble'], ['artstation', 'ArtStation'], ['workwithindies', 'Work With Indies']]
 const creativeLabel = (k) => (CREATIVE_BOARDS.find(([id]) => id === k) || [k, k])[1]
+// backend/scraper/search_modes.py LATAM_BOARDS, same order
+const LATAM_BOARDS = [['getonbrd', 'Get on Board'], ['computrabajo', 'Computrabajo'], ['elempleo', 'ElEmpleo']]
+const latamLabel = (k) => (LATAM_BOARDS.find(([id]) => id === k) || [k, k])[1]
 
 // note banners reuse the mode-badge palettes (sm-levels green / sm-jobright teal)
 const noteFor = (mode) => {
@@ -106,6 +109,8 @@ const noteFor = (mode) => {
   if (mode === 'creative') return ['Reads the job APIs and feeds of Behance, Hollylist, Wana Create, Dribbble, ArtStation and Work With Indies directly: no login and no Apify key. Remote applies on every board: where a board cannot filter it, the jobs that the posting calls on-site or hybrid are dropped. Location (a city name) applies on Hollylist, Wana Create, Dribbble, ArtStation and Work With Indies (remote jobs stay); Behance ignores it. On Remote searches, Country drops the Behance jobs that are not open to that country. Hollylist members-only offers are skipped, and a salary is stored as a number only in US dollars per year. Test reads at most 20 job pages.', 'sm-creative']
   if (mode === 'himalayas') return ['Reads the public API of himalayas.app: no login and no key. Every job is remote, so there is no Remote or Location. Country keeps the jobs open to that country, worldwide jobs included. A salary is stored as a number only in US dollars per year.', 'sm-himalayas']
   if (mode === 'eluta') return ['Reads Canadian jobs from employer career sites through the RSS search of eluta.ca: no login and no key. Location is a city with a 50 km radius; empty means all of Canada. Eluta has no remote filter. It allows 10 RSS checks a day from one address, so give each search a run interval of 1440 minutes. One run reads one feed page and at most 6 job pages; the other new jobs wait for the next run.', 'sm-eluta']
+  if (mode === 'latam') return ['Reads Get on Board’s public JSON API and the Computrabajo and ElEmpleo listing pages: no login and no key. Country picks the Computrabajo site (Colombia, Argentina, Mexico, Chile or Peru); other countries fall back to Colombia. Location is a city name. Each new Computrabajo or ElEmpleo job’s description is read from its own page; Test reads at most 20 of those pages.', 'sm-latam']
+  if (mode === 'dorks') return ['Runs one search-engine query per line on the provider and key from Settings › Search Dorks. Serper or Brave bills each query, so a new or copied dork search starts paused. The snippet is the first description and up to 25 result pages are read for the full text (Test reads at most 20). LinkedIn post results are kept with “LinkedIn Post” as the company.', 'sm-dorks']
   if (mode === 'extension') return ['Jobs come from the “Save to Job Feed” button on any website. The filters and auto-score depth below apply to each job as it is saved.', 'sm-levels']
   if (mode === 'linkedin_extension') return ['Jobs are captured while you browse linkedin.com/jobs/collections pages. The filters below are applied on import.', 'sm-levels']
   return null
@@ -164,6 +169,17 @@ const summaryOf = (s, boards = []) => {
   }
   if (m === 'himalayas') return `“${s.search_term || ''}” · Remote${s.country ? ` · ${s.country}` : ''}${last}`
   if (m === 'eluta') return `“${s.search_term || ''}” · ${s.location || 'Canada'}${last}`
+  if (m === 'latam') {
+    const bits = [`“${s.search_term || ''}”`]
+    if (s.location) bits.push(s.location)
+    if (s.country) bits.push(s.country)
+    bits.push((s.sources || []).map(latamLabel).join(', ') || 'no board')
+    return bits.join(' · ') + last
+  }
+  if (m === 'dorks') {
+    const first = (s.search_term || '').split('\n').map((x) => x.trim()).filter(Boolean)[0] || 'no dork yet'
+    return `${short(first, 70)} · max ${s.results_wanted || 50} new${last}`
+  }
   return `${short(s.direct_url) || 'no URL'}${last}`
 }
 
@@ -232,8 +248,8 @@ const toPayload = (d) => {
     p.location = d.location || ''
     p.country = d.country || DEFAULT_COUNTRY
   }
-  // Creative boards and Eluta take a city name; Himalayas and Behance read Country.
-  if (d.search_mode === 'creative' || d.search_mode === 'himalayas' || d.search_mode === 'eluta') {
+  // Creative boards, LatAm boards and Eluta take a city name; Himalayas and Behance read Country.
+  if (d.search_mode === 'creative' || d.search_mode === 'himalayas' || d.search_mode === 'eluta' || d.search_mode === 'latam') {
     p.location = d.location || ''
     p.country = d.country || DEFAULT_COUNTRY
   }
@@ -393,6 +409,22 @@ function ConfigForm({ d, set }) {
         sub="A city, 50 km around it. Empty = all of Canada." />,
       <Cell key="ho" label="Hours old · 0–720" mono type="number" min={BOUNDS.hours_old[0]} max={BOUNDS.hours_old[1]} value={d.hours_old} onChange={(v) => set({ hours_old: v })} sub="0 = no age limit" />,
     )
+  } else if (m === 'latam') {
+    fields.push(
+      <Cell key="term" label="Search term · required" mono value={d.search_term} onChange={(v) => set({ search_term: v })} placeholder="e.g. desarrollador backend" />,
+      <Cell key="loc" label="Location" value={d.location} onChange={(v) => set({ location: v })} placeholder="e.g. Bogotá"
+        sub="A city name. Empty = the whole country." />,
+      <Cell key="ctry" label="Country" value={d.country} options={countries} onChange={(v) => set({ country: v })}
+        sub="Picks the Computrabajo site. Argentina, Chile, Colombia, Mexico and Peru are supported; others use Colombia." />,
+      <Cell key="ho" label="Hours old · 0–720" mono type="number" min={BOUNDS.hours_old[0]} max={BOUNDS.hours_old[1]} value={d.hours_old} onChange={(v) => set({ hours_old: v })} sub="0 = no age limit" />,
+      <Cell key="rw" label="Results wanted · 1–500 per board" mono type="number" min={BOUNDS.results_wanted[0]} max={BOUNDS.results_wanted[1]} value={d.results_wanted} onChange={(v) => set({ results_wanted: v })} />,
+    )
+  } else if (m === 'dorks') {
+    fields.push(
+      <Cell key="ho" label="Hours old · 0–720" mono type="number" min={BOUNDS.hours_old[0]} max={BOUNDS.hours_old[1]} value={d.hours_old} onChange={(v) => set({ hours_old: v })}
+        sub="Maps to the provider’s date filter (day, week, month or year)" />,
+      <Cell key="rw" label="Results wanted · 1–500" mono type="number" min={BOUNDS.results_wanted[0]} max={BOUNDS.results_wanted[1]} value={d.results_wanted} onChange={(v) => set({ results_wanted: v })} />,
+    )
   } else if (m === 'trulyremote') {
     // The whole board is read on every run; this caps the new jobs whose pages one run opens.
     fields.push(
@@ -413,6 +445,15 @@ function ConfigForm({ d, set }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           {MODE_BLOCKS[m] && <Helper>{BLOCKED_BADGE}: {MODE_BLOCKS[m]}</Helper>}
           {MODE_TERMS[m] && <Helper style={{ color: 'var(--warn)' }}>{MODE_TERMS[m]}</Helper>}
+        </div>
+      )}
+
+      {m === 'dorks' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <Label>Dork queries · one per line</Label>
+          <Textarea value={d.search_term} onChange={(v) => set({ search_term: v })} rows={4} mono ariaLabel="Dork queries"
+            placeholder={'site:linkedin.com/posts "pasantía" Colombia\nsite:linkedin.com/posts "práctica" desarrollador'} />
+          <Helper>Each line is sent as its own query. Results are deduplicated by URL across lines.</Helper>
         </div>
       )}
 
@@ -437,6 +478,13 @@ function ConfigForm({ d, set }) {
           <Label style={{ marginRight: 3 }}>Boards</Label>
           {CREATIVE_BOARDS.map(([id, label]) => <Chip key={id} on={d.sources.includes(id)} label={label} onClick={() => toggleSrc(id)} />)}
           <Helper>Free; Apify has paid Behance and Hollylist boards as a fallback</Helper>
+        </div>
+      )}
+      {m === 'latam' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+          <Label style={{ marginRight: 3 }}>Boards</Label>
+          {LATAM_BOARDS.map(([id, label]) => <Chip key={id} on={d.sources.includes(id)} label={label} onClick={() => toggleSrc(id)} />)}
+          <Helper>Free; each board is read in every run</Helper>
         </div>
       )}
       {m === 'linkedin_personal' && (
@@ -1026,6 +1074,14 @@ function TestModal({ test, tab, setTab, onClose }) {
     if (cfg.results_wanted) params.push(`${cfg.results_wanted} new per run`)
   } else if (cfg.mode === 'creative') {
     params.push(`Boards: ${(cfg.sources || []).map(creativeLabel).join(', ')}`, `${cfg.results_wanted} per board max`)
+  } else if (cfg.mode === 'latam') {
+    if (cfg.search_term) params.push(`“${cfg.search_term}”`)
+    if (cfg.location) params.push(cfg.location)
+    if (cfg.country) params.push(cfg.country)
+    params.push(`Boards: ${(cfg.sources || []).map(latamLabel).join(', ')}`, `${cfg.results_wanted} per board max`)
+  } else if (cfg.mode === 'dorks') {
+    const lines = (cfg.search_term || '').split('\n').map((x) => x.trim()).filter(Boolean)
+    params.push(`${lines.length || 0} dork${lines.length === 1 ? '' : 's'}`, `${cfg.results_wanted} wanted`)
   } else {
     if (cfg.location) params.push(cfg.location)
     if (cfg.is_remote === true) params.push('remote only')

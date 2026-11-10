@@ -56,6 +56,17 @@ from backend.scraper._shared.postings import (
     # Mercado Libre wraps Eightfold on its own domain, keyed by the Eightfold tenant
     (["https://careers-meli.mercadolibre.com/es/careers?pid=1234567890",
       "https://mercadolibre.eightfold.ai/careers?pid=1234567890"], "eightfold:mercadolibre:1234567890"),
+    # LatAm boards: Get on Board's slug, Computrabajo's trailing id, ElEmpleo's numeric id
+    (["https://www.getonbrd.com/jobs/programacion/desarrollador-backend-remoto",
+      "https://www.getonbrd.com/empleos/programacion/desarrollador-backend-remoto?utm_source=linkedin"],
+     "getonbrd:desarrollador-backend-remoto"),
+    (["https://www.getonbrd.com/jobs/ti/go-dev"], "getonbrd:go-dev"),
+    (["https://co.computrabajo.com/ofertas-de-trabajo/oferta-de-trabajo-de-desarrollador-1234567890",
+      "https://co.computrabajo.com/ofertas-de-trabajo/oferta-de-trabajo-de-desarrollador-1234567890.html"],
+     "computrabajo:1234567890"),
+    (["https://www.elempleo.com/co/ofertas-empleo/desarrollador/123456",
+      "https://www.elempleo.com/co/ofertas-empleo/desarrollador?idoferta=123456"],
+     "elempleo:123456"),
     # hosted career platforms
     (["https://careers.ey.com/ey/job/Austin-Commercialization-Architect_Assistant-Director-TX-78701/1393883533/"],
      "successfactors:careers.ey.com:1393883533"),
@@ -177,6 +188,8 @@ def test_different_postings_keep_different_keys():
     "https://adobe.wd5.myworkdayjobs.com/external_experienced", # a site, not a job
     "https://www.linkedin.com/jobs/search/?keywords=pm",
     "https://www.ziprecruiter.com/ekn/AAJ_ADplQyx_o3QL3x5ENufsITOKbiy",
+    "https://co.computrabajo.com/ofertas-de-trabajo/desarrollador",   # a listing, no id
+    "https://www.elempleo.com/co/ofertas-empleo/desarrollador",        # a listing, no id
 ])
 def test_unknown_or_non_posting_links_name_nothing(url):
     assert posting_key(url) is None

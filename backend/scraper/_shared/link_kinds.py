@@ -29,7 +29,7 @@ BOARD_HOSTS = (
     "swooped.co", "jobsyn.org", "dice.com", "monster.com", "simplyhired.com", "builtin.com",
     "wellfound.com", "remocate.app", "teletype.in", "behance.net", "hollylist.com", "wanacreate.art",
     "dribbble.com", "artstation.com", "workwithindies.com", "himalayas.app", "eluta.ca",
-    "welcometothejungle.com",
+    "welcometothejungle.com", "getonbrd.com", "computrabajo.com", "elempleo.com",
     "lnkd.in",   # LinkedIn's short link lands on LinkedIn
 )
 
