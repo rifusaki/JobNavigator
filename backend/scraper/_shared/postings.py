@@ -230,7 +230,8 @@ _EIGHTFOLD_HOSTS = {
 
 def _eightfold(parsed, host, seg, qs):
     # <tenant>.eightfold.ai/careers/job/<id> or /careers?pid=<id>
-    if not (_is(host, "eightfold.ai") or host in _EIGHTFOLD_HOSTS):
+    # The bare eightfold.ai host is the vendor's own site, not a tenant board.
+    if not (host.endswith(".eightfold.ai") or host in _EIGHTFOLD_HOSTS):
         return None
     tenant = _EIGHTFOLD_HOSTS.get(host) or host.split(".")[0]
     pid = _first(qs, "pid")

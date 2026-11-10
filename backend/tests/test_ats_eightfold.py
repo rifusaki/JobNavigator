@@ -57,6 +57,7 @@ def test_bare_eightfold_host_is_not_a_tenant_board():
     from backend.scraper.ats.eightfold import is_eightfold, target
     assert not is_eightfold("https://eightfold.ai/careers")
     assert target("https://eightfold.ai/careers") is None
+    assert posting_key("https://eightfold.ai/careers?pid=1234567890") is None
 
 
 def test_target_resolves_custom_host_and_tenant_domain():

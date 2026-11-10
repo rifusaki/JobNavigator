@@ -190,6 +190,7 @@ def test_different_postings_keep_different_keys():
     "https://www.ziprecruiter.com/ekn/AAJ_ADplQyx_o3QL3x5ENufsITOKbiy",
     "https://co.computrabajo.com/ofertas-de-trabajo/desarrollador",   # a listing, no id
     "https://www.elempleo.com/co/ofertas-empleo/desarrollador",        # a listing, no id
+    "https://eightfold.ai/careers?pid=1234567890",                    # the vendor's site, not a tenant board
 ])
 def test_unknown_or_non_posting_links_name_nothing(url):
     assert posting_key(url) is None
