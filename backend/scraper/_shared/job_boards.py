@@ -16,6 +16,7 @@ import asyncio
 import json
 import logging
 import time
+import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -76,6 +77,11 @@ def clamp_results(value) -> int:
 def city_of(search: Search) -> str:
     """"Los Angeles, CA, United States" -> "Los Angeles"."""
     return split_country_suffix(search.location or "")[0].split(",")[0].strip()
+
+
+def fold_text(text) -> str:
+    """Lowercase and strip accents, so "Bogota" matches "Bogotá, D.C."."""
+    return unicodedata.normalize("NFKD", str(text or "")).encode("ascii", "ignore").decode().lower()
 
 
 def term_of(search: Search) -> str:
@@ -231,7 +237,7 @@ def _rejection(r: dict, search: Search, boards: dict, include_kw, exclude_kw, gl
         return reason
     city = city_of(search)
     if (board and board.local_city and city and r.get("arrangement") != REMOTE
-            and city.lower() not in (r.get("location") or "").lower()):
+            and fold_text(city) not in fold_text(r.get("location"))):
         return f"Not in {city}"
     return too_old(r, search.hours_old)
 
