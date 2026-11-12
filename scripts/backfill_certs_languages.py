@@ -62,6 +62,22 @@ LANGS = [
     },
 ]
 
+STACK = {
+    "Lenguajes": "Python, R, SQL, TypeScript/JavaScript, LaTeX, Go (básico)",
+    "Datos y ML": "pandas, numpy, scipy, matplotlib, ggplot2, PyTorch, scikit-learn, Power BI, Grafana",
+    "Cloud e infraestructura": "Azure Function Apps, Azure Data Factory, Microsoft SQL Server, Google Cloud Storage, Cloudflare",
+    "Desarrollo": "Express.js, Node.js, React, Flask, Git, Conda, Pixi",
+    "Geoespacial": "QGIS, Análisis espacial",
+}
+
+SKILLS = {
+    "Ingeniería de datos": "Diseño e implementación de pipelines ETL, integración de fuentes, automatización de flujos",
+    "Análisis y modelado": "Modelado estadístico, series de tiempo, modelos autorregresivos, visualización",
+    "Machine learning": "Clasificación, extracción de características, visión por computadora, entrenamiento y evaluación de modelos",
+    "Computación científica": "Métodos numéricos, simulación, modelado de sistemas físicos",
+    "Comunicación técnica": "Redacción, traducción, documentación",
+}
+
 
 def run():
     db = SessionLocal()
@@ -70,9 +86,8 @@ def run():
             rc = copy.deepcopy(p.resume_content or {})
             rc["certifications"] = copy.deepcopy(CERTS)
             rc["languages"] = copy.deepcopy(LANGS)
-            if "skills" in rc and isinstance(rc["skills"], dict):
-                rc["skills"].pop("Idiomas", None)
-                rc["skills"].pop("Languages", None)
+            rc["stack"] = copy.deepcopy(STACK)
+            rc["skills"] = copy.deepcopy(SKILLS)
             p.resume_content = rc
             flag_modified(p, "resume_content")
             print(f"Updated Persona {p.id}")
@@ -81,9 +96,8 @@ def run():
             jd = copy.deepcopy(r.json_data or {})
             jd["certifications"] = copy.deepcopy(CERTS)
             jd["languages"] = copy.deepcopy(LANGS)
-            if "skills" in jd and isinstance(jd["skills"], dict):
-                jd["skills"].pop("Idiomas", None)
-                jd["skills"].pop("Languages", None)
+            jd["stack"] = copy.deepcopy(STACK)
+            jd["skills"] = copy.deepcopy(SKILLS)
             r.json_data = jd
             flag_modified(r, "json_data")
             print(f"Updated Resume {r.id}: {r.name}")

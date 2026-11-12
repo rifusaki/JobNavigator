@@ -84,35 +84,36 @@ describe('DANGEROUS', () => {
 })
 
 describe('EMPTY / SECTION_ORDER', () => {
-  it('SECTION_ORDER lists the nine sections, Header first', () => {
-    expect(SECTION_ORDER).toEqual(['Header', 'Summary', 'Experience', 'Skills', 'Education', 'Certifications', 'Languages', 'Projects', 'Publications'])
+  it('SECTION_ORDER lists the ten sections, Header first', () => {
+    expect(SECTION_ORDER).toEqual(['Header', 'Summary', 'Experience', 'Stack', 'Skills', 'Education', 'Certifications', 'Languages', 'Projects', 'Publications'])
   })
   it('EMPTY carries a slot for every section the order names', () => {
     for (const name of SECTION_ORDER) expect(EMPTY, name).toHaveProperty(name.toLowerCase())
   })
   it('EMPTY is the zero state sectionCounts reads as all zeroes', () => {
-    expect(sectionCounts(EMPTY)).toEqual({ Experience: 0, Skills: 0, Education: 0, Certifications: 0, Languages: 0, Projects: 0, Publications: 0 })
+    expect(sectionCounts(EMPTY)).toEqual({ Experience: 0, Stack: 0, Skills: 0, Education: 0, Certifications: 0, Languages: 0, Projects: 0, Publications: 0 })
   })
 })
 
 describe('sectionCounts', () => {
-  it('counts list sections by length and Skills by group', () => {
+  it('counts list sections by length and Stack/Skills by group', () => {
     expect(sectionCounts({
       experience: [1, 2, 3],
-      skills: { Languages: ['py'], Cloud: [] },
+      stack: { Lenguajes: ['py'], Cloud: [] },
+      skills: { ML: ['classification'] },
       education: [1],
       certifications: [{ name: 'Cert A' }, { name: 'Cert B' }],
       languages: [{ language: 'Spanish' }],
       projects: [1, 2],
       publications: [],
-    })).toEqual({ Experience: 3, Skills: 2, Education: 1, Certifications: 2, Languages: 1, Projects: 2, Publications: 0 })
+    })).toEqual({ Experience: 3, Stack: 2, Skills: 1, Education: 1, Certifications: 2, Languages: 1, Projects: 2, Publications: 0 })
   })
   it('reads real data, which is looser than EMPTY: missing sections count zero', () => {
-    expect(sectionCounts({})).toEqual({ Experience: 0, Skills: 0, Education: 0, Certifications: 0, Languages: 0, Projects: 0, Publications: 0 })
-    expect(sectionCounts({ experience: null, skills: null })).toMatchObject({ Experience: 0, Skills: 0 })
+    expect(sectionCounts({})).toEqual({ Experience: 0, Stack: 0, Skills: 0, Education: 0, Certifications: 0, Languages: 0, Projects: 0, Publications: 0 })
+    expect(sectionCounts({ experience: null, stack: null, skills: null })).toMatchObject({ Experience: 0, Stack: 0, Skills: 0 })
   })
   it('never reports Header or Summary — they have no count', () => {
-    expect(Object.keys(sectionCounts(EMPTY))).toEqual(['Experience', 'Skills', 'Education', 'Certifications', 'Languages', 'Projects', 'Publications'])
+    expect(Object.keys(sectionCounts(EMPTY))).toEqual(['Experience', 'Stack', 'Skills', 'Education', 'Certifications', 'Languages', 'Projects', 'Publications'])
   })
 })
 

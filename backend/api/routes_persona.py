@@ -154,7 +154,7 @@ def _contact_from_header(header: dict) -> dict:
 # The résumé sections the Persona editor renders (ResumeSections.jsx SECTION_ORDER minus
 # Header, which lives in `contact`); defaults keep the node's shape stable for the editor.
 _CONTENT_DEFAULTS = (
-    ("summary", ""), ("experience", []), ("skills", {}),
+    ("summary", ""), ("experience", []), ("stack", {}), ("skills", {}),
     ("education", []), ("certifications", []), ("languages", []),
     ("projects", []), ("publications", []),
 )

@@ -52,6 +52,11 @@ function computeChanges(base, copy) {
     })
     ;(ce.suggested_bullets || []).forEach((sb, k) => out.push({ key: `exp${i}sb${k}`, where: `Experience · ${ce.company || 'role'} · suggested bullet`, kind: 'suggested', expIdx: i, sbIdx: k, before: '', removed: '', added: sb, after: '', text: sb }))
   })
+  const bstk = base.stack || {}, cstk = copy.stack || {}
+  Object.keys(cstk).forEach((cat) => {
+    if (!(cat in bstk)) out.push({ key: `stk:${cat}`, where: `Stack · ${cat}`, kind: 'added', path: `stack.${cat}`, before: '', removed: '', added: String(cstk[cat] || ''), after: '', text: String(cstk[cat] || '') })
+    else { const d = wordDiff(String(bstk[cat] || ''), String(cstk[cat] || '')); if (d) out.push({ key: `stk:${cat}`, where: `Stack · ${cat}`, kind: 'modified', path: `stack.${cat}`, baseText: String(bstk[cat] || ''), ...d }) }
+  })
   const bs = base.skills || {}, cs = copy.skills || {}
   Object.keys(cs).forEach((cat) => {
     if (!(cat in bs)) out.push({ key: `sk:${cat}`, where: `Skills · ${cat}`, kind: 'added', path: `skills.${cat}`, before: '', removed: '', added: String(cs[cat] || ''), after: '', text: String(cs[cat] || '') })
@@ -251,7 +256,7 @@ export default function ResumeEditor() {
   const changes = useMemo(() => (isCopy && baseData && data ? computeChanges(baseData, data) : []), [isCopy, baseData, data])
   const changedSections = useMemo(() => {
     const s = new Set()
-    changes.forEach((c) => { if (c.key === 'summary') s.add('Summary'); else if (c.key.startsWith('exp')) s.add('Experience'); else if (c.key.startsWith('sk:')) s.add('Skills') })
+    changes.forEach((c) => { if (c.key === 'summary') s.add('Summary'); else if (c.key.startsWith('exp')) s.add('Experience'); else if (c.key.startsWith('sk:')) s.add('Skills'); else if (c.key.startsWith('stk:')) s.add('Stack') })
     return s
   }, [changes])
 

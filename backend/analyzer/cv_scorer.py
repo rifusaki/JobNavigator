@@ -76,9 +76,21 @@ def _flatten_resume(json_data: dict) -> str:
             for b in exp.get("bullets", []) or []:
                 parts.append(f"- {b}")
 
+    stack = json_data.get("stack") or {}
+    if stack:
+        parts.append("## Stack")
+        if isinstance(stack, dict):
+            for category, items in stack.items():
+                if isinstance(items, list):
+                    parts.append(f"{category}: {', '.join(str(i) for i in items)}")
+                else:
+                    parts.append(f"{category}: {items}")
+        elif isinstance(stack, list):
+            parts.append(", ".join(str(s) for s in stack))
+
     skills = json_data.get("skills") or {}
     if skills:
-        parts.append("## Skills")
+        parts.append("## Capacidades" if stack else "## Skills")
         if isinstance(skills, dict):
             for category, items in skills.items():
                 if isinstance(items, list):

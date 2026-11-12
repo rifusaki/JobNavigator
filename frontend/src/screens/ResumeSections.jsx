@@ -19,8 +19,8 @@ export const kb = (fn, role = 'button') => ({
   role,
   onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(e) } },
 })
-export const EMPTY = { header: { name: '', contact_items: [] }, summary: '', experience: [], skills: {}, education: [], certifications: [], languages: [], projects: [], publications: [] }
-export const SECTION_ORDER = ['Header', 'Summary', 'Experience', 'Skills', 'Education', 'Certifications', 'Languages', 'Projects', 'Publications']
+export const EMPTY = { header: { name: '', contact_items: [] }, summary: '', experience: [], stack: {}, skills: {}, education: [], certifications: [], languages: [], projects: [], publications: [] }
+export const SECTION_ORDER = ['Header', 'Summary', 'Experience', 'Stack', 'Skills', 'Education', 'Certifications', 'Languages', 'Projects', 'Publications']
 // The résumé editor's sections: the page footer needs a job's title and company, so only a
 // job-linked tailored copy gets the 'Settings' section (never a base, a freeform tailor or Persona).
 export const resumeSectionNames = (doc) => (doc && !doc.is_base && doc.job_id ? [...SECTION_ORDER, 'Settings'] : SECTION_ORDER)
@@ -28,6 +28,7 @@ export const resumeSectionNames = (doc) => (doc && !doc.is_base && doc.job_id ? 
 // Section counts for the collapsed header, from whichever sections exist.
 export const sectionCounts = (data) => ({
   Experience: data.experience?.length || 0,
+  Stack: Object.keys(data.stack || {}).length,
   Skills: Object.keys(data.skills || {}).length,
   Education: data.education?.length || 0,
   Certifications: data.certifications?.length || 0,
@@ -153,7 +154,8 @@ export function SectionEditor({ name, data, setField, mutate, baseData, emptyNot
     case 'Header': return <HeaderEditor data={data} setField={setField} mutate={mutate} onRemoved={onRemoved} />
     case 'Summary': return <SummaryEditor pageHint={pageHint} data={data} setField={setField} baseSummary={baseData?.summary} />
     case 'Experience': return <ExperienceEditor emptyNote={emptyNote} data={data} setField={setField} mutate={mutate} baseExp={baseData?.experience} onRemoved={onRemoved} />
-    case 'Skills': return <SkillsEditor emptyNote={emptyNote} data={data} mutate={mutate} baseSkills={baseData?.skills} onError={onError} onRemoved={onRemoved} />
+    case 'Stack': return <SkillsEditor sectionKey="stack" emptyNote={emptyNote} data={data} mutate={mutate} baseSkills={baseData?.stack} onError={onError} onRemoved={onRemoved} />
+    case 'Skills': return <SkillsEditor sectionKey="skills" emptyNote={emptyNote} data={data} mutate={mutate} baseSkills={baseData?.skills} onError={onError} onRemoved={onRemoved} />
     case 'Education': return <EducationEditor emptyNote={emptyNote} data={data} setField={setField} mutate={mutate} onRemoved={onRemoved} />
     case 'Certifications': return <CertificationsEditor emptyNote={emptyNote} data={data} setField={setField} mutate={mutate} onRemoved={onRemoved} />
     case 'Languages': return <LanguagesEditor emptyNote={emptyNote} data={data} setField={setField} mutate={mutate} onRemoved={onRemoved} />
@@ -319,27 +321,30 @@ export function SummaryEditor({ data, setField, baseSummary, pageHint = true }) 
   )
 }
 
-// Skills: fixed-width category + value with tailoring ✦/revert/highlight when changed
-export function SkillsEditor({ emptyNote, data, mutate, baseSkills, onError, onRemoved }) {
-  const entries = Object.entries(data.skills || {})
+// Skills / Stack: fixed-width category + value with tailoring ✦/revert/highlight when changed
+export function SkillsEditor({ sectionKey = 'skills', emptyNote, data, mutate, baseSkills, onError, onRemoved }) {
+  const currentMap = data[sectionKey] || {}
+  const entries = Object.entries(currentMap)
   const undoRemove = useUndoRemove(mutate, onRemoved)
   // A category name is user text, so the dotted-path setField would silently drop writes
   // to a category containing a "." (".NET", "Node.js"). Write the key directly instead.
-  const setVal = (k, v) => { if (DANGEROUS.has(k)) return; mutate((d) => { d.skills = d.skills || {}; d.skills[k] = v }) }
+  const setVal = (k, v) => { if (DANGEROUS.has(k)) return; mutate((d) => { d[sectionKey] = d[sectionKey] || {}; d[sectionKey][k] = v }) }
   // Refuse a rename onto an existing category (would silently overwrite its values) and a
   // blank name; the caller reverts the uncontrolled input.
   const rename = (oldK, newK) => {
     if (oldK === newK) return true
-    if (!newK.trim()) { onError?.('A skills category needs a name.'); return false }
+    if (!newK.trim()) { onError?.('A category needs a name.'); return false }
     if (DANGEROUS.has(newK)) { onError?.(`“${newK}” can’t be used as a category name.`); return false }
-    if (Object.prototype.hasOwnProperty.call(data.skills || {}, newK)) { onError?.(`“${newK}” already exists — renaming onto it would erase its values.`); return false }
-    mutate((d) => { const ns = {}; for (const [k, v] of Object.entries(d.skills)) ns[k === oldK ? newK : k] = v; d.skills = ns })
+    if (Object.prototype.hasOwnProperty.call(data[sectionKey] || {}, newK)) { onError?.(`“${newK}” already exists — renaming onto it would erase its values.`); return false }
+    mutate((d) => { const ns = {}; for (const [k, v] of Object.entries(d[sectionKey] || {})) ns[k === oldK ? newK : k] = v; d[sectionKey] = ns })
     return true
   }
-  const move = (k, dir) => mutate((d) => { const e = Object.entries(d.skills); const i = e.findIndex(([x]) => x === k); const j = i + dir; if (i < 0 || j < 0 || j >= e.length) return;[e[i], e[j]] = [e[j], e[i]]; d.skills = Object.fromEntries(e) })
+  const move = (k, dir) => mutate((d) => { const e = Object.entries(d[sectionKey] || {}); const i = e.findIndex(([x]) => x === k); const j = i + dir; if (i < 0 || j < 0 || j >= e.length) return;[e[i], e[j]] = [e[j], e[i]]; d[sectionKey] = Object.fromEntries(e) })
   const liveRename = useRef(rename)
   liveRename.current = rename
   const arrows = (k) => <MoveArrows onUp={() => move(k, -1)} onDown={() => move(k, 1)} />
+  const isStack = sectionKey === 'stack'
+  const rowLabel = isStack ? 'stack' : 'skill'
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 10 }}>
       {entries.map(([k, v], ei) => {
@@ -358,7 +363,7 @@ export function SkillsEditor({ emptyNote, data, mutate, baseSkills, onError, onR
             <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, height: 29, padding: '0 9px', border: `1px solid ${marked ? 'var(--change-soft)' : 'var(--edge)'}`, background: 'var(--surface-2)', boxShadow: marked ? 'var(--change-edge)' : undefined, borderRadius: 'var(--radius-field)' }}>
               {marked && <span title={added ? 'Added by tailoring' : 'Changed by tailoring'} style={{ flex: '0 0 auto', color: 'var(--ai)', fontSize: 10 }}>✦</span>}
               {/* ui: keep — bare input inside the row's own bordered box, not a field */}
-              <input value={v} onChange={(e) => setVal(k, e.target.value)} placeholder="Skill values…" style={{ flex: 1, minWidth: 0, border: 'none', background: 'transparent', outline: 'none', fontSize: 12, color: 'var(--text-2)', fontFamily: 'var(--sans)' }} />
+              <input value={v} onChange={(e) => setVal(k, e.target.value)} placeholder={`${isStack ? 'Stack' : 'Skill'} values…`} style={{ flex: 1, minWidth: 0, border: 'none', background: 'transparent', outline: 'none', fontSize: 12, color: 'var(--text-2)', fontFamily: 'var(--sans)' }} />
               {/* --change-ink, not --good: this mark means "tailoring added it", and the
                   two are the same colour in the default palette but not in a theme
                   whose tailoring tint is its own (saas: violet). */}
@@ -366,14 +371,14 @@ export function SkillsEditor({ emptyNote, data, mutate, baseSkills, onError, onR
               {changed && <span onClick={() => setVal(k, baseSkills[k])} title="Decline this tailoring change" style={{ flex: '0 0 auto', fontSize: 11, color: 'var(--warn)', cursor: 'pointer', fontWeight: 500 }}>↩</span>}
             </div>
             {/* restore rebuilds the key order so the row comes back where it was */}
-            <RemoveX onClick={() => undoRemove('Removed skill category',
-              (d) => { delete d.skills[k] },
-              (d) => { const en = Object.entries(d.skills || {}); en.splice(ei, 0, [k, v]); d.skills = Object.fromEntries(en) })} />
+            <RemoveX onClick={() => undoRemove(`Removed ${rowLabel} category`,
+              (d) => { delete d[sectionKey][k] },
+              (d) => { const en = Object.entries(d[sectionKey] || {}); en.splice(ei, 0, [k, v]); d[sectionKey] = Object.fromEntries(en) })} />
           </div>
         )
       })}
-      {entries.length === 0 && <EmptyState note={emptyNote} what="skills" />}
-      <DashedAdd onClick={() => mutate((d) => { d.skills = d.skills || {}; d.skills[`Skill ${Object.keys(d.skills).length + 1}`] = '' })}>+ Add skill row</DashedAdd>
+      {entries.length === 0 && <EmptyState note={emptyNote} what={rowLabel} />}
+      <DashedAdd onClick={() => mutate((d) => { d[sectionKey] = d[sectionKey] || {}; d[sectionKey][`${isStack ? 'Stack' : 'Skill'} ${Object.keys(d[sectionKey]).length + 1}`] = '' })}>+ Add {rowLabel} row</DashedAdd>
     </div>
   )
 }

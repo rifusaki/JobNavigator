@@ -7,14 +7,18 @@ from backend.api.routes_resumes import _EMPTY_RESUME, _render_html
 
 
 def test_empty_resume_and_content_defaults_include_new_sections():
+    assert "stack" in _EMPTY_RESUME
     assert "certifications" in _EMPTY_RESUME
     assert "languages" in _EMPTY_RESUME
+    assert _EMPTY_RESUME["stack"] == {}
     assert _EMPTY_RESUME["certifications"] == []
     assert _EMPTY_RESUME["languages"] == []
 
     defaults_dict = dict(_CONTENT_DEFAULTS)
+    assert "stack" in defaults_dict
     assert "certifications" in defaults_dict
     assert "languages" in defaults_dict
+    assert defaults_dict["stack"] == {}
     assert defaults_dict["certifications"] == []
     assert defaults_dict["languages"] == []
 
@@ -23,7 +27,8 @@ def test_resume_content_from_preserves_certifications_and_languages():
     raw = {
         "summary": "Data specialist",
         "experience": [],
-        "skills": {"Python": "3.11"},
+        "stack": {"Lenguajes": "Python, SQL, R"},
+        "skills": {"Ingeniería de datos": "ETL pipelines"},
         "education": [{"school": "UNAL", "degree": "Física"}],
         "certifications": [
             {
@@ -38,6 +43,8 @@ def test_resume_content_from_preserves_certifications_and_languages():
         ],
     }
     extracted = _resume_content_from(raw)
+    assert extracted["stack"] == {"Lenguajes": "Python, SQL, R"}
+    assert extracted["skills"] == {"Ingeniería de datos": "ETL pipelines"}
     assert len(extracted["certifications"]) == 1
     assert extracted["certifications"][0]["name"] == "Desarrolla+ Colombia – Java Backend"
     assert len(extracted["languages"]) == 2
@@ -47,6 +54,13 @@ def test_resume_content_from_preserves_certifications_and_languages():
 def test_flatten_resume_includes_certifications_and_languages():
     data = {
         "header": {"name": "Test User"},
+        "stack": {
+            "Lenguajes": ["Python", "SQL", "R"],
+            "Cloud": "Azure, GCP",
+        },
+        "skills": {
+            "Ingeniería de datos": "ETL pipelines, data modeling",
+        },
         "certifications": [
             {
                 "name": "Developing AI Applications with Python and Flask",
@@ -60,6 +74,11 @@ def test_flatten_resume_includes_certifications_and_languages():
         ],
     }
     text = _flatten_resume(data)
+    assert "## Stack" in text
+    assert "Lenguajes: Python, SQL, R" in text
+    assert "Cloud: Azure, GCP" in text
+    assert "## Capacidades" in text
+    assert "Ingeniería de datos: ETL pipelines, data modeling" in text
     assert "## Certifications & Courses" in text
     assert "Developing AI Applications with Python and Flask (IBM — may. 2024)" in text
     assert "## Languages" in text
@@ -72,7 +91,8 @@ def test_render_templates_with_certifications_and_languages():
         "header": {"name": "Rifusaki User", "contact_items": []},
         "summary": "Physics and Machine Learning specialist.",
         "experience": [],
-        "skills": {"Lenguajes": "Python, SQL, R"},
+        "stack": {"Lenguajes": ["Python", "SQL", "R"]},
+        "skills": {"Ingeniería de datos": "ETL, data pipelines"},
         "education": [{"school": "Universidad Nacional de Colombia", "degree": "Física"}],
         "certifications": [
             {
@@ -89,6 +109,9 @@ def test_render_templates_with_certifications_and_languages():
 
     # Test rifusaki (English)
     html_en = _render_html(data, "rifusaki", "letter")
+    assert "Stack" in html_en
+    assert "Python, SQL, R" in html_en
+    assert "Capabilities" in html_en
     assert "Certifications & Courses" in html_en
     assert "Introduction to Cloud Computing" in html_en
     assert "IBM" in html_en
@@ -98,6 +121,8 @@ def test_render_templates_with_certifications_and_languages():
 
     # Test rifusaki_es (Spanish)
     html_es = _render_html(data, "rifusaki_es", "letter")
+    assert "Stack" in html_es
+    assert "Capacidades" in html_es
     assert "Certificaciones & Cursos" in html_es
     assert "Introduction to Cloud Computing" in html_es
     assert "IBM" in html_es

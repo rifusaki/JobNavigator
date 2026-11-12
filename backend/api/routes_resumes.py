@@ -293,7 +293,7 @@ def _load_template_fonts(fonts_dir_str: str) -> dict:
 
 # The sections a new résumé has (frontend ResumeSections.jsx EMPTY): what a template may read.
 _EMPTY_RESUME = {"header": {"name": "", "contact_items": []}, "summary": "", "experience": [],
-                 "skills": {}, "education": [], "certifications": [], "languages": [],
+                 "stack": {}, "skills": {}, "education": [], "certifications": [], "languages": [],
                  "projects": [], "publications": []}
 
 
@@ -351,23 +351,24 @@ def _render_html(json_data: dict, template_name: str, page_format: str) -> str:
     content["header"] = {**_EMPTY_RESUME["header"], **content["header"]}
     content = _render_safe_links(content)
 
-    # Format skills cleanly: lists/sets/tuples or stringified lists become comma-separated strings
-    raw_skills = content.get("skills")
-    if isinstance(raw_skills, dict):
-        content["skills"] = {
-            k: _format_skill_value(v) for k, v in raw_skills.items()
-        }
-    elif isinstance(raw_skills, list):
-        formatted = []
-        for item in raw_skills:
-            if isinstance(item, dict):
-                item_copy = dict(item)
-                if "items" in item_copy:
-                    item_copy["items"] = _format_skill_value(item_copy["items"])
-                formatted.append(item_copy)
-            else:
-                formatted.append(_format_skill_value(item))
-        content["skills"] = formatted
+    # Format stack and skills cleanly: lists/sets/tuples or stringified lists become comma-separated strings
+    for sec_name in ("stack", "skills"):
+        raw_map = content.get(sec_name)
+        if isinstance(raw_map, dict):
+            content[sec_name] = {
+                k: _format_skill_value(v) for k, v in raw_map.items()
+            }
+        elif isinstance(raw_map, list):
+            formatted = []
+            for item in raw_map:
+                if isinstance(item, dict):
+                    item_copy = dict(item)
+                    if "items" in item_copy:
+                        item_copy["items"] = _format_skill_value(item_copy["items"])
+                    formatted.append(item_copy)
+                else:
+                    formatted.append(_format_skill_value(item))
+            content[sec_name] = formatted
 
     html = template.render(
         **content,
@@ -1125,6 +1126,7 @@ async def _tailor_impl(base_resume_id: str, job_id: str | None, job_description_
         resume_sections = {
             "summary": base_data.get("summary", ""),
             "experience": list(base_data.get("experience", []) or []),
+            "stack": dict(base_data.get("stack", {}) or {}),
             "skills": dict(base_data.get("skills", {}) or {}),
         }
 
@@ -1185,6 +1187,8 @@ async def _tailor_impl(base_resume_id: str, job_id: str | None, job_description_
                     if llm_job.get("description") is not None:
                         base_exp[i]["description"] = llm_job["description"]
             tailored_data["experience"] = base_exp
+        if "stack" in llm_result:
+            tailored_data["stack"] = llm_result["stack"]
         if "skills" in llm_result:
             tailored_data["skills"] = llm_result["skills"]
 
@@ -1789,7 +1793,7 @@ async def parse_resume_pdf(pdf_bytes: bytes, db: Session) -> dict:
         '{"header":{"name":"","contact_items":[{"text":"location"},{"text":"email","url":"mailto:email"},'
         '{"text":"LinkedIn","url":"linkedin.com/in/..."},{"text":"phone"}]},"summary":"",'
         '"experience":[{"company":"","title":"","location":"","date":"","description":"","bullets":[]}],'
-        '"skills":{},"education":[{"school":"","location":"","degree":""}],'
+        '"stack":{},"skills":{},"education":[{"school":"","location":"","degree":""}],'
         '"certifications":[{"name":"","issuer":"","date":"","url":""}],'
         '"languages":[{"language":"","proficiency":""}],"projects":[],"publications":[]}'
     )
@@ -1802,9 +1806,10 @@ async def parse_resume_pdf(pdf_bytes: bytes, db: Session) -> dict:
         f"Parse this resume text into the following JSON structure. "
         f"Fill in all fields you can find. Use empty strings for missing fields, empty arrays for missing lists.\n\n"
         f"Extraction rules:\n"
-        f"1. Put certifications, courses, and specialized programs into 'certifications' (do NOT put them in skills or education).\n"
-        f"2. Put spoken/written languages and their proficiency levels into 'languages' (do NOT put them in skills).\n"
-        f"3. In 'skills', group technical and domain skills by category name (e.g. {{\"Lenguajes\": \"Python, SQL\", \"Machine Learning\": \"PyTorch, scikit-learn\"}}). Do not put languages or courses inside skills.\n\n"
+        f"1. Put programming languages, frameworks, libraries, databases, cloud platforms, and developer tools into 'stack', grouped by category name (e.g. {{\"Lenguajes\": \"Python, SQL, R\", \"Cloud e infraestructura\": \"Azure Data Factory, Microsoft SQL Server\"}}).\n"
+        f"2. Put functional capabilities, analytical methodologies, domains, and soft/engineering practices into 'skills', grouped by category name (e.g. {{\"Ingeniería de datos\": \"ETL, data pipelines\", \"Machine learning\": \"clasificación, visión por computadora\"}}).\n"
+        f"3. Put certifications, courses, and specialized programs into 'certifications' (do NOT put them in stack, skills, or education).\n"
+        f"4. Put spoken/written languages and their proficiency levels into 'languages' (do NOT put them in stack or skills).\n\n"
         f"Target schema:\n{schema_example}\n\n"
         f"Resume text:\n{extracted_text}"
     )

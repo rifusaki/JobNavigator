@@ -252,9 +252,25 @@ ul.bullets li::before {
   </div>
   {% endif %}
 
+  {% if stack %}
+  <div class="section">
+    <div class="section-title">Stack</div>
+    {% if stack is mapping %}
+      {% for label, value in stack.items() %}
+      <div class="skill-line"><span class="skill-label">{{ label }}:</span> {{ (value | join(', ')) if (value is iterable and value is not string) else (value or '') }}</div>
+      {% endfor %}
+    {% else %}
+      {% for sk in stack %}
+      {% set items_val = sk['items'] if 'items' in sk else '' %}
+      <div class="skill-line"><span class="skill-label">{{ sk.category }}:</span> {{ (items_val | join(', ')) if (items_val is iterable and items_val is not string) else items_val }}</div>
+      {% endfor %}
+    {% endif %}
+  </div>
+  {% endif %}
+
   {% if skills %}
   <div class="section">
-    <div class="section-title">Skills</div>
+    <div class="section-title">{% if stack %}Capabilities{% else %}Skills{% endif %}</div>
     {% if skills is mapping %}
       {% for label, value in skills.items() %}
       <div class="skill-line"><span class="skill-label">{{ label }}:</span> {{ (value | join(', ')) if (value is iterable and value is not string) else (value or '') }}</div>
