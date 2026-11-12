@@ -308,6 +308,35 @@ ul.bullets li::before {
   </div>
   {% endif %}
 
+  {% if certifications %}
+  <div class="section">
+    <div class="section-title">Certificaciones & Cursos</div>
+    {% for cert in certifications %}
+    <div class="edu-entry">
+      <div class="edu-row">
+        <span class="edu-school">{{ cert.name or cert.title }}</span>
+        <span class="edu-location">{{ cert.date or cert.dates or '' }}</span>
+      </div>
+      {% if cert.issuer %}
+      <div class="edu-degree">{{ cert.issuer }}{% if cert.url %} · <a href="{{ cert.url }}" style="color:#a36775;text-decoration:none">{{ cert.url }}</a>{% endif %}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if languages %}
+  <div class="section">
+    <div class="section-title">Idiomas</div>
+    <div class="skills-grid">
+      {% for lang in languages %}
+      <span class="skill-label">{{ lang.language or lang.name }}</span>
+      <span class="skill-value">{{ lang.proficiency or lang.level or '' }}</span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
   {% if projects %}
   <div class="section">
     <div class="section-title">Proyectos</div>

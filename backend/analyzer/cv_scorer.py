@@ -102,6 +102,35 @@ def _flatten_resume(json_data: dict) -> str:
             tail = " ".join(x for x in (loc, years) if x)
             parts.append(f"{degree} — {school}, {tail}".strip(" —,"))
 
+    certifications = json_data.get("certifications") or []
+    if certifications:
+        parts.append("## Certifications & Courses")
+        for cert in certifications:
+            if not isinstance(cert, dict):
+                parts.append(str(cert))
+                continue
+            name = cert.get("name") or cert.get("title") or ""
+            issuer = cert.get("issuer") or cert.get("institution") or cert.get("organization") or ""
+            date = cert.get("date") or cert.get("dates") or cert.get("year") or ""
+            tail = " — ".join(x for x in (issuer, date) if x)
+            if name and tail:
+                parts.append(f"{name} ({tail})")
+            elif name or tail:
+                parts.append(name or tail)
+
+    languages = json_data.get("languages") or []
+    if languages:
+        parts.append("## Languages")
+        for lang in languages:
+            if not isinstance(lang, dict):
+                parts.append(str(lang))
+                continue
+            name = lang.get("language") or lang.get("name") or ""
+            prof = lang.get("proficiency") or lang.get("level") or ""
+            line = f"{name}: {prof}".strip(": ") if prof else name
+            if line:
+                parts.append(line)
+
     projects = json_data.get("projects") or []
     if projects:
         parts.append("## Projects")

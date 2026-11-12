@@ -19,8 +19,8 @@ export const kb = (fn, role = 'button') => ({
   role,
   onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(e) } },
 })
-export const EMPTY = { header: { name: '', contact_items: [] }, summary: '', experience: [], skills: {}, education: [], projects: [], publications: [] }
-export const SECTION_ORDER = ['Header', 'Summary', 'Experience', 'Skills', 'Education', 'Projects', 'Publications']
+export const EMPTY = { header: { name: '', contact_items: [] }, summary: '', experience: [], skills: {}, education: [], certifications: [], languages: [], projects: [], publications: [] }
+export const SECTION_ORDER = ['Header', 'Summary', 'Experience', 'Skills', 'Education', 'Certifications', 'Languages', 'Projects', 'Publications']
 // The résumé editor's sections: the page footer needs a job's title and company, so only a
 // job-linked tailored copy gets the 'Settings' section (never a base, a freeform tailor or Persona).
 export const resumeSectionNames = (doc) => (doc && !doc.is_base && doc.job_id ? [...SECTION_ORDER, 'Settings'] : SECTION_ORDER)
@@ -30,6 +30,8 @@ export const sectionCounts = (data) => ({
   Experience: data.experience?.length || 0,
   Skills: Object.keys(data.skills || {}).length,
   Education: data.education?.length || 0,
+  Certifications: data.certifications?.length || 0,
+  Languages: data.languages?.length || 0,
   Projects: data.projects?.length || 0,
   Publications: data.publications?.length || 0,
 })
@@ -153,6 +155,8 @@ export function SectionEditor({ name, data, setField, mutate, baseData, emptyNot
     case 'Experience': return <ExperienceEditor emptyNote={emptyNote} data={data} setField={setField} mutate={mutate} baseExp={baseData?.experience} onRemoved={onRemoved} />
     case 'Skills': return <SkillsEditor emptyNote={emptyNote} data={data} mutate={mutate} baseSkills={baseData?.skills} onError={onError} onRemoved={onRemoved} />
     case 'Education': return <EducationEditor emptyNote={emptyNote} data={data} setField={setField} mutate={mutate} onRemoved={onRemoved} />
+    case 'Certifications': return <CertificationsEditor emptyNote={emptyNote} data={data} setField={setField} mutate={mutate} onRemoved={onRemoved} />
+    case 'Languages': return <LanguagesEditor emptyNote={emptyNote} data={data} setField={setField} mutate={mutate} onRemoved={onRemoved} />
     case 'Projects': return <ProjectsEditor emptyNote={emptyNote} data={data} setField={setField} mutate={mutate} onRemoved={onRemoved} />
     case 'Publications': return <PublicationsEditor emptyNote={emptyNote} data={data} setField={setField} mutate={mutate} onRemoved={onRemoved} />
     case 'Settings': return <SettingsEditor data={data} setField={setField} />
@@ -409,6 +413,54 @@ export function EducationEditor({ emptyNote, data, setField, mutate, onRemoved }
       ))}
       {(data.education || []).length === 0 && <EmptyState note={emptyNote} what="education" />}
       <DashedAdd big onClick={() => mutate((d) => { d.education = d.education || []; d.education.push({ school: '', location: '', degree: '' }) })}>+ Add education</DashedAdd>
+    </div>
+  )
+}
+export function CertificationsEditor({ emptyNote, data, setField, mutate, onRemoved }) {
+  const undoRemove = useUndoRemove(mutate, onRemoved)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 9, paddingTop: 10 }}>
+      {(data.certifications || []).map((c, i) => (
+        <Card key={i} style={{ padding: 11, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
+            <MicroField label="Name" value={c.name} onChange={(v) => setField(`certifications.${i}.name`, v)} placeholder="e.g. Developing AI Applications with Python" />
+            <MicroField label="Issuer" value={c.issuer} onChange={(v) => setField(`certifications.${i}.issuer`, v)} placeholder="e.g. IBM, Coursera" />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
+            <MicroField label="Date" value={c.date} onChange={(v) => setField(`certifications.${i}.date`, v)} placeholder="e.g. May 2024" />
+            <MicroField label="URL" value={c.url} onChange={(v) => setField(`certifications.${i}.url`, v)} placeholder="Credential URL (optional)" />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <RemoveLink onClick={() => undoRemove('Removed certification',
+              (d) => d.certifications.splice(i, 1),
+              (d) => { d.certifications = d.certifications || []; d.certifications.splice(i, 0, c) })}>Remove certification</RemoveLink>
+          </div>
+        </Card>
+      ))}
+      {(data.certifications || []).length === 0 && <EmptyState note={emptyNote} what="certifications" />}
+      <DashedAdd big onClick={() => mutate((d) => { d.certifications = d.certifications || []; d.certifications.push({ name: '', issuer: '', date: '', url: '' }) })}>+ Add certification</DashedAdd>
+    </div>
+  )
+}
+export function LanguagesEditor({ emptyNote, data, setField, mutate, onRemoved }) {
+  const undoRemove = useUndoRemove(mutate, onRemoved)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 9, paddingTop: 10 }}>
+      {(data.languages || []).map((l, i) => (
+        <Card key={i} style={{ padding: 11, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
+            <MicroField label="Language" value={l.language} onChange={(v) => setField(`languages.${i}.language`, v)} placeholder="e.g. Spanish, English" />
+            <MicroField label="Proficiency" value={l.proficiency} onChange={(v) => setField(`languages.${i}.proficiency`, v)} placeholder="e.g. Native, Professional working" />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <RemoveLink onClick={() => undoRemove('Removed language',
+              (d) => d.languages.splice(i, 1),
+              (d) => { d.languages = d.languages || []; d.languages.splice(i, 0, l) })}>Remove language</RemoveLink>
+          </div>
+        </Card>
+      ))}
+      {(data.languages || []).length === 0 && <EmptyState note={emptyNote} what="languages" />}
+      <DashedAdd big onClick={() => mutate((d) => { d.languages = d.languages || []; d.languages.push({ language: '', proficiency: '' }) })}>+ Add language</DashedAdd>
     </div>
   )
 }

@@ -155,7 +155,8 @@ def _contact_from_header(header: dict) -> dict:
 # Header, which lives in `contact`); defaults keep the node's shape stable for the editor.
 _CONTENT_DEFAULTS = (
     ("summary", ""), ("experience", []), ("skills", {}),
-    ("education", []), ("projects", []), ("publications", []),
+    ("education", []), ("certifications", []), ("languages", []),
+    ("projects", []), ("publications", []),
 )
 
 

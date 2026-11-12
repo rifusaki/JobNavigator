@@ -293,7 +293,8 @@ def _load_template_fonts(fonts_dir_str: str) -> dict:
 
 # The sections a new résumé has (frontend ResumeSections.jsx EMPTY): what a template may read.
 _EMPTY_RESUME = {"header": {"name": "", "contact_items": []}, "summary": "", "experience": [],
-                 "skills": {}, "education": [], "projects": [], "publications": []}
+                 "skills": {}, "education": [], "certifications": [], "languages": [],
+                 "projects": [], "publications": []}
 
 
 def _format_skill_value(val) -> str:
@@ -1784,12 +1785,26 @@ async def parse_resume_pdf(pdf_bytes: bytes, db: Session) -> dict:
     if len(extracted_text.strip()) < 50:
         raise HTTPException(status_code=422, detail="Could not extract enough text from PDF. It may be image-based.")
 
-    schema_example = '{"header":{"name":"","contact_items":[{"text":"location"},{"text":"email","url":"mailto:email"},{"text":"LinkedIn","url":"linkedin.com/in/..."},{"text":"phone"}]},"summary":"","experience":[{"company":"","title":"","location":"","date":"","description":"","bullets":[]}],"skills":{},"education":[{"school":"","location":"","degree":""}],"projects":[],"publications":[]}'
+    schema_example = (
+        '{"header":{"name":"","contact_items":[{"text":"location"},{"text":"email","url":"mailto:email"},'
+        '{"text":"LinkedIn","url":"linkedin.com/in/..."},{"text":"phone"}]},"summary":"",'
+        '"experience":[{"company":"","title":"","location":"","date":"","description":"","bullets":[]}],'
+        '"skills":{},"education":[{"school":"","location":"","degree":""}],'
+        '"certifications":[{"name":"","issuer":"","date":"","url":""}],'
+        '"languages":[{"language":"","proficiency":""}],"projects":[],"publications":[]}'
+    )
 
-    system_prompt = "You are a resume parser. Extract structured data from resume text. Return ONLY valid JSON, no markdown fences."
+    system_prompt = (
+        "You are an expert resume parser. Extract structured data from resume text into clean JSON. "
+        "Return ONLY valid JSON, no markdown fences."
+    )
     user_prompt = (
         f"Parse this resume text into the following JSON structure. "
         f"Fill in all fields you can find. Use empty strings for missing fields, empty arrays for missing lists.\n\n"
+        f"Extraction rules:\n"
+        f"1. Put certifications, courses, and specialized programs into 'certifications' (do NOT put them in skills or education).\n"
+        f"2. Put spoken/written languages and their proficiency levels into 'languages' (do NOT put them in skills).\n"
+        f"3. In 'skills', group technical and domain skills by category name (e.g. {{\"Lenguajes\": \"Python, SQL\", \"Machine Learning\": \"PyTorch, scikit-learn\"}}). Do not put languages or courses inside skills.\n\n"
         f"Target schema:\n{schema_example}\n\n"
         f"Resume text:\n{extracted_text}"
     )
