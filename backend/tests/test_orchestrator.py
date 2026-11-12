@@ -138,3 +138,51 @@ async def test_run_company_delegates_to_company_pages(monkeypatch):
     from backend.scraper.orchestrator import run_company
     await run_company(FakeCompany())
     assert called["name"] == "Acme"
+
+
+def test_target_priority_mapping():
+    from backend.scraper.orchestrator import _target_priority, _SEARCH_MODE_PRIORITY
+    from backend.scraper.targets import Target
+
+    class FakeSearch:
+        def __init__(self, mode):
+            self.search_mode = mode
+
+    assert _target_priority(Target(key=("dorks",), subscribers=[FakeSearch("dorks")])) == 10
+    assert _target_priority(Target(key=("latam",), subscribers=[FakeSearch("latam")])) == 20
+    assert _target_priority(Target(key=("eightfold",), subscribers=[FakeSearch("eightfold")])) == 30
+    assert _target_priority(Target(key=("keyword",), subscribers=[FakeSearch("keyword")])) == 40
+    assert _target_priority(Target(key=("company",), subscribers=[FakeSearch("company")])) == 50
+    assert _target_priority(Target(key=("other",), subscribers=[FakeSearch("other")])) == 50
+    assert _target_priority(Target(key=("linkedin_personal",), subscribers=[FakeSearch("linkedin_personal")])) == 90
+
+    # Fallback to key when subscribers are empty or search_mode missing
+    assert _target_priority(Target(key=("dorks", "own", "1"), subscribers=[])) == 10
+    assert _target_priority(Target(key=("latam",), subscribers=[FakeSearch(None)])) == 20
+    assert _target_priority(None) == 50
+
+
+def test_target_priority_stable_sorting():
+    from backend.scraper.orchestrator import _target_priority
+    from backend.scraper.targets import Target
+
+    class FakeSearch:
+        def __init__(self, mode, name):
+            self.search_mode = mode
+            self.name = name
+
+    t_li1 = Target(key=("linkedin_personal", "1"), subscribers=[FakeSearch("linkedin_personal", "li-1")])
+    t_kw1 = Target(key=("keyword", "1"), subscribers=[FakeSearch("keyword", "kw-1")])
+    t_dorks = Target(key=("dorks", "1"), subscribers=[FakeSearch("dorks", "dorks-1")])
+    t_latam = Target(key=("latam", "1"), subscribers=[FakeSearch("latam", "latam-1")])
+    t_kw2 = Target(key=("keyword", "2"), subscribers=[FakeSearch("keyword", "kw-2")])
+    t_li2 = Target(key=("linkedin_personal", "2"), subscribers=[FakeSearch("linkedin_personal", "li-2")])
+
+    targets = [t_li1, t_kw1, t_dorks, t_latam, t_kw2, t_li2]
+    targets.sort(key=_target_priority)
+
+    # Expected order: dorks (10), latam (20), kw-1 (40), kw-2 (40), li-1 (90), li-2 (90)
+    # Notice stable preservation of kw-1 before kw-2, and li-1 before li-2
+    names = [t.subscribers[0].name for t in targets]
+    assert names == ["dorks-1", "latam-1", "kw-1", "kw-2", "li-1", "li-2"]
+

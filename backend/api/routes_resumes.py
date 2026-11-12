@@ -296,6 +296,28 @@ _EMPTY_RESUME = {"header": {"name": "", "contact_items": []}, "summary": "", "ex
                  "skills": {}, "education": [], "projects": [], "publications": []}
 
 
+def _format_skill_value(val) -> str:
+    """Format a skill value so lists, sets, tuples, or stringified Python lists
+    render as clean comma-separated strings ('Python, SQL, R') instead of
+    bracketed list representations ('['Python', 'SQL', 'R']')."""
+    if val is None:
+        return ""
+    if isinstance(val, (list, tuple, set)):
+        return ", ".join(str(x).strip() for x in val if x is not None and str(x).strip())
+    if isinstance(val, str):
+        s = val.strip()
+        if s.startswith("[") and s.endswith("]"):
+            try:
+                import ast
+                parsed = ast.literal_eval(s)
+                if isinstance(parsed, (list, tuple, set)):
+                    return ", ".join(str(x).strip() for x in parsed if x is not None and str(x).strip())
+            except Exception:
+                pass
+        return s
+    return str(val)
+
+
 def _render_html(json_data: dict, template_name: str, page_format: str) -> str:
     """Render a resume to HTML using its Jinja2 template."""
     from jinja2 import Environment, FileSystemLoader
@@ -327,6 +349,25 @@ def _render_html(json_data: dict, template_name: str, page_format: str) -> str:
         content["header"] = dict(_EMPTY_RESUME["header"])
     content["header"] = {**_EMPTY_RESUME["header"], **content["header"]}
     content = _render_safe_links(content)
+
+    # Format skills cleanly: lists/sets/tuples or stringified lists become comma-separated strings
+    raw_skills = content.get("skills")
+    if isinstance(raw_skills, dict):
+        content["skills"] = {
+            k: _format_skill_value(v) for k, v in raw_skills.items()
+        }
+    elif isinstance(raw_skills, list):
+        formatted = []
+        for item in raw_skills:
+            if isinstance(item, dict):
+                item_copy = dict(item)
+                if "items" in item_copy:
+                    item_copy["items"] = _format_skill_value(item_copy["items"])
+                formatted.append(item_copy)
+            else:
+                formatted.append(_format_skill_value(item))
+        content["skills"] = formatted
+
     html = template.render(
         **content,
         page_format=page_format,

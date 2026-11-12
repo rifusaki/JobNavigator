@@ -7,6 +7,7 @@ logger = logging.getLogger("jobnavigator.scraper.browser")
 _STEALTH_ARGS = [
     "--disable-blink-features=AutomationControlled",
     "--disable-features=IsolateOrigins,site-per-process",
+    "--disable-dev-shm-usage",
     "--no-first-run",
     "--no-default-browser-check",
 ]

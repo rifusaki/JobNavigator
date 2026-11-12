@@ -217,6 +217,44 @@ def search_config_error(search) -> Optional[str]:
     return config_error(search)
 
 
+# ── Target priority scheduling ───────────────────────────────────────────────
+# Fast, lightweight HTTP/API requests execute first, yielding fast results early.
+# Heavy browser sessions or slower scrapers run last.
+
+_DEFAULT_TARGET_PRIORITY = 50
+
+_SEARCH_MODE_PRIORITY: dict[str, int] = {
+    "dorks": 10,
+    "latam": 20,
+    "eightfold": 30,
+    "keyword": 40,
+    "company": 50,
+    "linkedin_personal": 90,
+}
+
+
+def _target_priority(target) -> int:
+    """Return scheduling priority for a target (lower numbers run earlier).
+
+    Fast, lightweight HTTP/API scrapers execute first; heavy browser sessions
+    run last. If unspecified or missing, returns _DEFAULT_TARGET_PRIORITY (50).
+    """
+    if not target:
+        return _DEFAULT_TARGET_PRIORITY
+
+    subscribers = getattr(target, "subscribers", None)
+    if subscribers:
+        mode = getattr(subscribers[0], "search_mode", None)
+        if mode:
+            return _SEARCH_MODE_PRIORITY.get(str(mode).lower(), _DEFAULT_TARGET_PRIORITY)
+
+    key = getattr(target, "key", None)
+    if isinstance(key, tuple) and key:
+        return _SEARCH_MODE_PRIORITY.get(str(key[0]).lower(), _DEFAULT_TARGET_PRIORITY)
+
+    return _DEFAULT_TARGET_PRIORITY
+
+
 # ── Fan-out: all active searches + companies ────────────────────────────────
 
 def _record_search_log(db, search: Search, result: dict, run_id=None, started_at=None) -> ScrapeLog:
@@ -322,6 +360,7 @@ async def run_all(force: bool = False, account_ids=None, skip=None):
         # QA F10 / R4-05: JobSpy subscribers share one fetch only when their
         # results_wanted / hours_old are close; otherwise they are separate fetches.
         targets = split_search_targets(group_targets(runnable, _key))
+        targets.sort(key=_target_priority)
         logger.info(f"Running {len(runnable)} active searches as {len(targets)} targets")
         sweep_accounts = []
 

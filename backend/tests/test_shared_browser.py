@@ -7,6 +7,7 @@ def test_stealth_args_defined():
     from backend.scraper._shared.browser import _STEALTH_ARGS
     assert isinstance(_STEALTH_ARGS, list)
     assert any("blink-features" in arg for arg in _STEALTH_ARGS)
+    assert "--disable-dev-shm-usage" in _STEALTH_ARGS
 
 
 def test_user_agent_defined():

@@ -209,9 +209,16 @@ ul.bullets li {
   {% if skills %}
   <div class="section">
     <div class="section-title">Skills</div>
-    {% for label, value in skills.items() %}
-    <div class="skill-line"><span class="skill-label">{{ label }}:</span> {{ value }}</div>
-    {% endfor %}
+    {% if skills is mapping %}
+      {% for label, value in skills.items() %}
+      <div class="skill-line"><span class="skill-label">{{ label }}:</span> {{ (value | join(', ')) if (value is iterable and value is not string) else (value or '') }}</div>
+      {% endfor %}
+    {% else %}
+      {% for sk in skills %}
+      {% set items_val = sk['items'] if 'items' in sk else '' %}
+      <div class="skill-line"><span class="skill-label">{{ sk.category }}:</span> {{ (items_val | join(', ')) if (items_val is iterable and items_val is not string) else items_val }}</div>
+      {% endfor %}
+    {% endif %}
   </div>
   {% endif %}
 

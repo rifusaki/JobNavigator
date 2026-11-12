@@ -536,52 +536,106 @@ async def _search_code_elements_for_apply_url(page, job_id: str = "") -> str:
     return ""
 
 
-async def _enrich_apply_urls(page, jobs: list[dict]):
-    """Navigate to individual job pages to backfill apply URLs, as a separate pass after all cards are collected so it doesn't break card element references during the main scrape loop."""
+async def _recycle_page(context, page):
+    """Cleanly close an existing page and allocate a fresh page in the same context."""
+    if page:
+        try:
+            await page.close()
+        except Exception:
+            pass
+    if not context:
+        return None
+    try:
+        return await context.new_page()
+    except Exception as e:
+        logger.warning(f"Failed to allocate fresh browser page: {e}")
+        return None
+
+
+async def _enrich_single_job(page, job_id: str) -> str:
+    """Navigate to an individual job page and extract its external apply URL."""
+    response = await page.goto(
+        f"https://www.linkedin.com/jobs/view/{job_id}/",
+        wait_until="domcontentloaded",
+        timeout=15000,
+    )
+    if (response and response.status == 429) or await _check_rate_limit(page):
+        raise LinkedInRateLimitError(f"429 rate limit detected on job {job_id}")
+    return await _extract_apply_url(page, job_id)
+
+
+async def _enrich_apply_urls(context, page, jobs: list[dict] | None = None) -> tuple[any, int]:
+    """Navigate to individual job pages to backfill apply URLs, recycling tabs periodically."""
+    # Support backward-compatible 2-argument call: _enrich_apply_urls(page, jobs)
+    if jobs is None and isinstance(page, list):
+        jobs = page
+        page = context
+        context = getattr(page, "context", None)
+    elif not context and page:
+        context = getattr(page, "context", None)
+
+    if not jobs:
+        return page, 0
+
     needs_enrichment = [j for j in jobs if not j.get("apply_url")]
     if not needs_enrichment:
         logger.info("All jobs already have apply URLs, skipping enrichment")
-        return
+        return page, 0
+
+    if not page:
+        logger.warning("No browser page available for apply URL enrichment")
+        return page, 0
 
     logger.info(f"Enriching apply URLs for {len(needs_enrichment)} jobs via individual pages")
     enriched = 0
     rate_limit_hits = 0
+
     for idx, j in enumerate(needs_enrichment):
-        job_id = j["job_id"]
+        job_id = j.get("job_id")
+        if not job_id:
+            continue
+
         try:
-            await page.goto(
-                f"https://www.linkedin.com/jobs/view/{job_id}/",
-                wait_until="domcontentloaded",
-                timeout=15000,
-            )
-            await asyncio.sleep(random.uniform(*DELAY_ENRICHMENT))
-
-            # 429 check — abort enrichment gracefully (jobs are already collected)
-            if await _handle_rate_limit(page, f"enrichment {idx+1}/{len(needs_enrichment)}"):
-                rate_limit_hits += 1
-                if rate_limit_hits >= 2:
-                    logger.warning(f"Hit 429 twice during enrichment, skipping remaining {len(needs_enrichment) - idx} URLs")
-                    break
-                await page.goto(
-                    f"https://www.linkedin.com/jobs/view/{job_id}/",
-                    wait_until="domcontentloaded",
-                    timeout=15000,
-                )
-                await asyncio.sleep(random.uniform(*DELAY_ENRICHMENT))
-                if await _check_rate_limit(page):
-                    logger.warning(f"Still rate-limited after retry, skipping remaining {len(needs_enrichment) - idx} URLs")
-                    break
-
-            url = await _extract_apply_url(page, job_id)
+            url = await asyncio.wait_for(_enrich_single_job(page, job_id), timeout=25.0)
             if url:
                 j["apply_url"] = url
                 j["url"] = url
                 enriched += 1
                 logger.debug(f"Enriched apply URL for {job_id}: {url[:80]}")
-        except Exception as e:
-            logger.debug(f"Apply URL enrichment failed for {job_id}: {e}")
+                if enriched % 15 == 0:
+                    logger.info(f"Recycling browser tab after {enriched} enriched jobs")
+                    page = await _recycle_page(context, page)
+                    if not page:
+                        logger.warning("Browser context lost during tab recycling, stopping enrichment")
+                        break
+        except LinkedInRateLimitError as rle:
+            rate_limit_hits += 1
+            logger.warning(f"LinkedIn 429 rate limit detected during enrichment ({rate_limit_hits}/2): {rle}")
+            if rate_limit_hits >= 2:
+                logger.warning(
+                    f"Hit 429 twice during enrichment, skipping remaining {len(needs_enrichment) - idx} URLs"
+                )
+                break
+            wait_time = random.uniform(60, 120)
+            logger.info(f"Waiting {wait_time:.0f}s before retry...")
+            await asyncio.sleep(wait_time)
+            page = await _recycle_page(context, page)
+            if not page:
+                break
+        except (asyncio.TimeoutError, Exception) as e:
+            is_timeout = isinstance(e, asyncio.TimeoutError)
+            err_type = "Timeout (25s)" if is_timeout else "Navigation error"
+            logger.warning(f"{err_type} enriching apply URL for {job_id}: {e}; recycling tab")
+            page = await _recycle_page(context, page)
+            if not page:
+                logger.warning("Browser context lost during page recovery, stopping enrichment")
+                break
+
+        if idx < len(needs_enrichment) - 1:
+            await asyncio.sleep(random.uniform(*DELAY_ENRICHMENT))
 
     logger.info(f"Apply URL enrichment: {enriched}/{len(needs_enrichment)} jobs enriched")
+    return page, enriched
 
 
 async def _scroll_job_list(page):
@@ -805,6 +859,7 @@ async def run(search: Search) -> dict:
     pw = None
     browser = None
     context = None
+    page = None
     try:
         db_settings = SessionLocal()
         try:
@@ -884,7 +939,7 @@ async def run(search: Search) -> dict:
         # Enrich apply URLs — only for kept jobs, after all filtering (non-fatal)
         if kept_jobs:
             try:
-                await _enrich_apply_urls(page, kept_jobs)
+                page, _ = await _enrich_apply_urls(context, page, kept_jobs)
             except Exception as enrich_err:
                 logger.warning(f"Apply URL enrichment error (continuing): {enrich_err}")
 
@@ -1009,10 +1064,21 @@ async def run(search: Search) -> dict:
         log_activity("scrape", f"LinkedIn personal '{search.name}' failed: {e}")
         return {"jobs_found": 0, "new_jobs": 0, "error": str(e), "duration": duration}
     finally:
+        if page:
+            try:
+                await page.close()
+            except Exception:
+                pass
         if browser:
-            await browser.close()
+            try:
+                await browser.close()
+            except Exception:
+                pass
         if pw:
-            await pw.stop()
+            try:
+                await pw.stop()
+            except Exception:
+                pass
 
 
 async def preview(search, db) -> dict:
@@ -1043,10 +1109,21 @@ async def preview(search, db) -> dict:
         await _ensure_logged_in(page, context, email, password)
     except Exception as e:
         # Login failure is fatal — no partial results possible
+        if page:
+            try:
+                await page.close()
+            except Exception:
+                pass
         if browser:
-            await browser.close()
+            try:
+                await browser.close()
+            except Exception:
+                pass
         if pw:
-            await pw.stop()
+            try:
+                await pw.stop()
+            except Exception:
+                pass
         return {
             "search_name": search.name,
             "error": str(e),
@@ -1143,7 +1220,7 @@ async def preview(search, db) -> dict:
         # --- Phase 4: Enrich apply URLs (non-fatal) ---
         if kept_jobs:
             try:
-                await _enrich_apply_urls(page, kept_jobs)
+                page, _ = await _enrich_apply_urls(context, page, kept_jobs)
             except Exception as enrich_err:
                 msg = f"Apply URL enrichment: {enrich_err}"
                 logger.warning(msg)
@@ -1154,10 +1231,21 @@ async def preview(search, db) -> dict:
         warnings.append(f"Processing error: {e}")
         logger.error(f"Test processing error: {e}")
     finally:
+        if page:
+            try:
+                await page.close()
+            except Exception:
+                pass
         if browser:
-            await browser.close()
+            try:
+                await browser.close()
+            except Exception:
+                pass
         if pw:
-            await pw.stop()
+            try:
+                await pw.stop()
+            except Exception:
+                pass
 
     duration = round(_time.time() - start, 1)
 

@@ -255,12 +255,13 @@ ul.bullets li::before {
       {% if skills is mapping %}
         {% for label, value in skills.items() %}
         <span class="skill-label">{{ label }}</span>
-        <span class="skill-value">{{ value }}</span>
+        <span class="skill-value">{{ (value | join(', ')) if (value is iterable and value is not string) else (value or '') }}</span>
         {% endfor %}
       {% else %}
         {% for sk in skills %}
+        {% set items_val = sk['items'] if 'items' in sk else '' %}
         <span class="skill-label">{{ sk.category }}</span>
-        <span class="skill-value">{{ sk.items }}</span>
+        <span class="skill-value">{{ (items_val | join(', ')) if (items_val is iterable and items_val is not string) else items_val }}</span>
         {% endfor %}
       {% endif %}
     </div>

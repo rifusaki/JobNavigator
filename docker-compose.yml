@@ -38,6 +38,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
+    shm_size: '2gb'
     restart: unless-stopped
     networks: [default, llm]
     logging:

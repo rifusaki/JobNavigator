@@ -460,3 +460,145 @@ async def test_scrape_collection_reports_an_expired_session(monkeypatch, landing
     with pytest.raises(lp.LinkedInSessionExpiredError, match="session expired"):
         await lp._scrape_collection(_WallPage(), "https://www.linkedin.com/jobs/collections/recommended/",
                                     "recommended")
+
+
+@pytest.mark.asyncio
+async def test_enrich_single_job_detects_429(monkeypatch):
+    from backend.scraper.sources import linkedin_personal as lp
+    from unittest.mock import AsyncMock, MagicMock
+
+    page = MagicMock()
+    page.goto = AsyncMock(return_value=MagicMock(status=429))
+    with pytest.raises(lp.LinkedInRateLimitError, match="429 rate limit"):
+        await lp._enrich_single_job(page, "12345")
+
+
+@pytest.mark.asyncio
+async def test_enrich_single_job_success(monkeypatch):
+    from backend.scraper.sources import linkedin_personal as lp
+    from unittest.mock import AsyncMock, MagicMock
+
+    page = MagicMock()
+    page.goto = AsyncMock(return_value=MagicMock(status=200))
+    monkeypatch.setattr(lp, "_check_rate_limit", AsyncMock(return_value=False))
+    monkeypatch.setattr(lp, "_extract_apply_url", AsyncMock(return_value="https://acme.com/apply"))
+
+    url = await lp._enrich_single_job(page, "12345")
+    assert url == "https://acme.com/apply"
+
+
+@pytest.mark.asyncio
+async def test_enrich_apply_urls_tab_recycling(monkeypatch):
+    from backend.scraper.sources import linkedin_personal as lp
+    from unittest.mock import AsyncMock, MagicMock
+
+    async def _no_sleep(_seconds):
+        return None
+    monkeypatch.setattr(lp.asyncio, "sleep", _no_sleep)
+
+    jobs = [{"job_id": str(i), "title": f"Job {i}"} for i in range(20)]
+
+    context = MagicMock()
+    page = MagicMock()
+    page.close = AsyncMock()
+    new_page = MagicMock()
+    new_page.close = AsyncMock()
+    context.new_page = AsyncMock(return_value=new_page)
+
+    monkeypatch.setattr(lp, "_enrich_single_job", AsyncMock(return_value="https://acme.com/apply"))
+
+    active_page, count = await lp._enrich_apply_urls(context, page, jobs)
+
+    assert count == 20
+    assert active_page is new_page
+    assert page.close.call_count == 1
+    assert context.new_page.call_count == 1
+    for j in jobs:
+        assert j["apply_url"] == "https://acme.com/apply"
+
+
+@pytest.mark.asyncio
+async def test_enrich_apply_urls_timeout_and_error_handling(monkeypatch):
+    from backend.scraper.sources import linkedin_personal as lp
+    from unittest.mock import AsyncMock, MagicMock
+    import asyncio
+
+    async def _no_sleep(_seconds):
+        return None
+    monkeypatch.setattr(lp.asyncio, "sleep", _no_sleep)
+
+    jobs = [
+        {"job_id": "1", "title": "Job 1"},
+        {"job_id": "2", "title": "Job 2"},
+        {"job_id": "3", "title": "Job 3"},
+    ]
+
+    context = MagicMock()
+    page1 = MagicMock()
+    page1.close = AsyncMock()
+    page2 = MagicMock()
+    page2.close = AsyncMock()
+    page3 = MagicMock()
+    page3.close = AsyncMock()
+
+    context.new_page = AsyncMock(side_effect=[page2, page3])
+
+    async def fake_enrich(page, job_id):
+        if job_id == "1":
+            raise asyncio.TimeoutError("operation timed out")
+        elif job_id == "2":
+            raise RuntimeError("navigation failed")
+        return "https://company.org/careers"
+
+    monkeypatch.setattr(lp, "_enrich_single_job", fake_enrich)
+
+    active_page, count = await lp._enrich_apply_urls(context, page1, jobs)
+
+    assert count == 1
+    assert jobs[0].get("apply_url") is None
+    assert jobs[1].get("apply_url") is None
+    assert jobs[2]["apply_url"] == "https://company.org/careers"
+    assert page1.close.call_count == 1
+    assert page2.close.call_count == 1
+    assert context.new_page.call_count == 2
+    assert active_page is page3
+
+
+@pytest.mark.asyncio
+async def test_enrich_apply_urls_breaks_after_two_429s(monkeypatch):
+    from backend.scraper.sources import linkedin_personal as lp
+    from unittest.mock import AsyncMock, MagicMock
+
+    async def _no_sleep(_seconds):
+        return None
+    monkeypatch.setattr(lp.asyncio, "sleep", _no_sleep)
+
+    jobs = [
+        {"job_id": "1", "title": "Job 1"},
+        {"job_id": "2", "title": "Job 2"},
+        {"job_id": "3", "title": "Job 3"},
+        {"job_id": "4", "title": "Job 4"},
+    ]
+
+    context = MagicMock()
+    page = MagicMock()
+    page.close = AsyncMock()
+    context.new_page = AsyncMock(return_value=page)
+
+    calls = []
+    async def fake_enrich(page, job_id):
+        calls.append(job_id)
+        if job_id == "1":
+            return "https://acme.com/1"
+        if job_id in ("2", "3"):
+            raise lp.LinkedInRateLimitError("429 rate limit")
+        return "https://acme.com/4"
+
+    monkeypatch.setattr(lp, "_enrich_single_job", fake_enrich)
+
+    _, count = await lp._enrich_apply_urls(context, page, jobs)
+
+    assert count == 1
+    assert jobs[0]["apply_url"] == "https://acme.com/1"
+    assert calls == ["1", "2", "3"]
+    assert "apply_url" not in jobs[3]
