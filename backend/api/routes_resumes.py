@@ -927,29 +927,28 @@ def resume_json_from_persona(persona: Persona) -> dict:
 
     # LinkedIn
     li = str(contact.get("linkedin") or "").strip()
-    if li:
-        if li.lower().startswith(("http://", "https://")):
-            contact_items.append({"text": "LinkedIn", "url": li})
-        elif not li.lower().startswith("linkedin"):
-            contact_items.append({"text": "LinkedIn", "url": f"https://www.linkedin.com/in/{li.strip('/')}"})
-        else:
-            contact_items.append({"text": "LinkedIn", "url": ""})
+    if li and li.lower() != "linkedin":
+        li_url = li if li.lower().startswith(("http://", "https://")) else f"https://www.linkedin.com/in/{li.strip('/')}"
+        contact_items.append({"text": "LinkedIn", "url": li_url})
 
     # GitHub
     gh = str(contact.get("github") or "").strip()
-    if gh:
-        if gh.lower().startswith(("http://", "https://")):
-            contact_items.append({"text": "GitHub", "url": gh})
-        elif not gh.lower().startswith("github"):
-            contact_items.append({"text": "GitHub", "url": f"https://github.com/{gh.strip('/')}"})
-        else:
-            contact_items.append({"text": "GitHub", "url": ""})
+    if gh and gh.lower() != "github":
+        gh_url = gh if gh.lower().startswith(("http://", "https://")) else f"https://github.com/{gh.strip('/')}"
+        contact_items.append({"text": "GitHub", "url": gh_url})
 
     # Portfolio
     pf = str(contact.get("portfolio") or "").strip()
     if pf:
         pf_url = pf if pf.lower().startswith(("http://", "https://")) else f"https://{pf}"
         contact_items.append({"text": "Portfolio", "url": pf_url})
+
+    def _same_url_or_email(u1, u2):
+        if not u1 or not u2:
+            return False
+        c1 = str(u1).replace("mailto:", "").rstrip("/").lower()
+        c2 = str(u2).replace("mailto:", "").rstrip("/").lower()
+        return c1 == c2
 
     # Preserve any additional contact items from rc_hdr if not already present
     existing_items = rc_hdr.get("contact_items") or []
@@ -961,9 +960,9 @@ def resume_json_from_persona(persona: Persona) -> dict:
             url = str(it.get("url") or "").strip()
             if not txt and not url:
                 continue
-            if url and any(ci.get("url") == url for ci in contact_items):
+            if url and any(_same_url_or_email(ci.get("url"), url) for ci in contact_items):
                 continue
-            if txt and any(ci.get("text") == txt for ci in contact_items):
+            if txt and any(ci.get("text", "").lower() == txt.lower() for ci in contact_items):
                 continue
             contact_items.append({"text": txt or "Link", "url": url})
 
