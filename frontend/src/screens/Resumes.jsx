@@ -318,6 +318,17 @@ function AddModal({ onClose, onCreated }) {
     try { const { data } = await api.post('/resumes', { name: name.trim(), is_base: true, json_data: EMPTY }); onCreated(data.id) }
     catch (e) { setErr(e.response?.data?.detail || 'Create failed'); setBusy('') }
   }
+  const createFromPersona = async () => {
+    if (busy) return
+    setBusy('persona'); setErr('')
+    try {
+      const { data } = await api.post('/resumes/from-persona', { name: name.trim() || undefined })
+      onCreated(data.id)
+    } catch (e) {
+      setErr(typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : 'Could not create résumé from Persona')
+      setBusy('')
+    }
+  }
   const importPdf = async (file) => {
     if (!file || busy) return
     setBusy('import'); setErr('')
@@ -357,6 +368,7 @@ function AddModal({ onClose, onCreated }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
           {/* Disabled primary button is --line on --muted — --edge as a fill would read as a second live button. */}
           <Button size="sm" onClick={createScratch} disabled={!canCreate} style={{ marginLeft: 'auto' }}>{busy === 'create' ? 'Creating…' : 'Create from scratch'}</Button>
+          <Button variant="secondary" size="sm" onClick={createFromPersona} disabled={!!busy} title="Create using your profile details from Persona">{busy === 'persona' ? 'Creating…' : 'From Persona'}</Button>
           <Button variant="secondary" size="sm" onClick={() => fileRef.current?.click()} disabled={!!busy}>{busy === 'import' ? 'Parsing…' : 'Import PDF…'}</Button>
           <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
           {/* Clear the file input after every pick — re-picking the same file otherwise fires no change event. */}

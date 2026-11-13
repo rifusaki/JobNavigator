@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api, { accountChanged, writeHeaders } from '../api'
 import { useFlushBeforeSwitch } from '../accounts'
 import { useToasts, ToastStack } from '../Toast'
@@ -276,6 +277,26 @@ export default function Persona() {
   // Uses ui.jsx's ChoiceModal, the same shell as the résumé editor's Tailor modal.
   const [importOpen, setImportOpen] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const navigate = useNavigate()
+
+  const handleCreateBaseResume = useCallback(async () => {
+    setExporting(true)
+    try {
+      flushPending()
+      const { data } = await api.post('/resumes/from-persona', { template: 'rifusaki_es' })
+      pushToast({
+        kind: 'success',
+        msg: 'Base résumé created from Persona',
+        action: 'Open ↗',
+        onAction: () => navigate(`/resumes/${data.id}`),
+      })
+      navigate(`/resumes/${data.id}`)
+    } catch (e) {
+      console.error('persona export base resume', e)
+      pushToast({ kind: 'error', msg: 'Could not create base résumé' + errDetail(e) })
+    } finally { setExporting(false) }
+  }, [flushPending, navigate, pushToast])
 
   const runImport = useCallback(async ({ label, run }) => {
     setImporting(true)
@@ -324,6 +345,9 @@ export default function Persona() {
       </div>
       {/* ui: keep — accent-ink save indicator, not a Link (would add cursor:pointer + hover) */}
       <span style={{ marginLeft: 'auto', fontSize: 11.5, lineHeight: '17px', color: 'var(--accent)', visibility: saved ? 'visible' : 'hidden' }}>Saved ✓</span>
+      <Button variant="secondary" size="sm" busy={exporting} disabled={!ready || !p}
+        title="Create a Base résumé populated with your Persona profile"
+        onClick={handleCreateBaseResume}>{exporting ? 'Exporting…' : 'Create Base Résumé ↓'}</Button>
       <Button variant="secondary" size="sm" busy={importing} disabled={!ready || !p} ariaHaspopup="dialog"
         title="Fill contact details and résumé content from a base résumé or a PDF"
         onClick={() => setImportOpen(true)}>{importing ? 'Parsing…' : 'Import ↑'}</Button>

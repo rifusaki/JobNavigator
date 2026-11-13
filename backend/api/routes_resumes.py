@@ -1,4 +1,5 @@
 """Resume builder CRUD, preview, PDF export, and PDF import endpoints."""
+import copy
 import functools as _functools
 import io
 import json
@@ -886,6 +887,146 @@ def create_resume(body: dict, db: Session = Depends(get_db)):
         json_data=checked_json_data(body.get("json_data")),
     )
     db.add(resume)
+    db.commit()
+    db.refresh(resume)
+    return _resume_to_dict(resume, include_json_data=True)
+
+
+def resume_json_from_persona(persona: Persona) -> dict:
+    """Build a complete Resume.json_data dict from Persona's contact and resume_content."""
+    rc = dict(persona.resume_content or {})
+    contact = dict(persona.contact or {})
+
+    # 1. Header
+    rc_hdr = rc.get("header") if isinstance(rc.get("header"), dict) else {}
+    name = str(rc_hdr.get("name") or "").strip()
+    if not name:
+        parts = [str(contact.get("first_name") or "").strip(), str(contact.get("last_name") or "").strip()]
+        name = " ".join(p for p in parts if p) or "Base Résumé"
+
+    title = str(rc_hdr.get("title") or "").strip()
+
+    contact_items = []
+    # Location
+    city = str(contact.get("city") or "").strip()
+    state = str(contact.get("state") or "").strip()
+    country = str(contact.get("country") or "").strip()
+    loc_parts = [p for p in [city, state, country] if p]
+    if loc_parts:
+        contact_items.append({"text": ", ".join(loc_parts)})
+
+    # Email
+    email = str(contact.get("email") or "").strip()
+    if email:
+        contact_items.append({"text": email, "url": f"mailto:{email}"})
+
+    # Phone
+    phone = str(contact.get("phone") or "").strip()
+    if phone:
+        contact_items.append({"text": phone})
+
+    # LinkedIn
+    li = str(contact.get("linkedin") or "").strip()
+    if li:
+        if li.lower().startswith(("http://", "https://")):
+            contact_items.append({"text": "LinkedIn", "url": li})
+        elif not li.lower().startswith("linkedin"):
+            contact_items.append({"text": "LinkedIn", "url": f"https://www.linkedin.com/in/{li.strip('/')}"})
+        else:
+            contact_items.append({"text": "LinkedIn", "url": ""})
+
+    # GitHub
+    gh = str(contact.get("github") or "").strip()
+    if gh:
+        if gh.lower().startswith(("http://", "https://")):
+            contact_items.append({"text": "GitHub", "url": gh})
+        elif not gh.lower().startswith("github"):
+            contact_items.append({"text": "GitHub", "url": f"https://github.com/{gh.strip('/')}"})
+        else:
+            contact_items.append({"text": "GitHub", "url": ""})
+
+    # Portfolio
+    pf = str(contact.get("portfolio") or "").strip()
+    if pf:
+        pf_url = pf if pf.lower().startswith(("http://", "https://")) else f"https://{pf}"
+        contact_items.append({"text": "Portfolio", "url": pf_url})
+
+    # Preserve any additional contact items from rc_hdr if not already present
+    existing_items = rc_hdr.get("contact_items") or []
+    if isinstance(existing_items, list):
+        for it in existing_items:
+            if not isinstance(it, dict):
+                continue
+            txt = str(it.get("text") or "").strip()
+            url = str(it.get("url") or "").strip()
+            if not txt and not url:
+                continue
+            if url and any(ci.get("url") == url for ci in contact_items):
+                continue
+            if txt and any(ci.get("text") == txt for ci in contact_items):
+                continue
+            contact_items.append({"text": txt or "Link", "url": url})
+
+    header = {
+        "name": name,
+        "title": title,
+        "contact_items": contact_items,
+    }
+
+    return {
+        "header": header,
+        "summary": rc.get("summary", ""),
+        "experience": copy.deepcopy(rc.get("experience", [])),
+        "stack": copy.deepcopy(rc.get("stack", {})),
+        "skills": copy.deepcopy(rc.get("skills", {})),
+        "education": copy.deepcopy(rc.get("education", [])),
+        "certifications": copy.deepcopy(rc.get("certifications", [])),
+        "languages": copy.deepcopy(rc.get("languages", [])),
+        "projects": copy.deepcopy(rc.get("projects", [])),
+        "publications": copy.deepcopy(rc.get("publications", [])),
+    }
+
+
+@router.post("/from-persona", status_code=201)
+def create_resume_from_persona(body: dict = None, db: Session = Depends(get_db)):
+    """Create or overwrite a base résumé directly from Persona's contact and resume_content."""
+    payload = body or {}
+    persona = get_persona(db, create=False)
+    if not persona or not (persona.resume_content or {}):
+        raise HTTPException(400, "Persona has no resume_content — fill it in /persona first")
+
+    json_data = resume_json_from_persona(persona)
+
+    template = payload.get("template") or _default_template_id(db)
+    validate_template_name(template, TEMPLATES_DIR)
+    page_format = payload.get("page_format", "letter")
+
+    overwrite_id = payload.get("overwrite_resume_id")
+    if overwrite_id:
+        resume = get_owned_or_404(db, Resume, overwrite_id, "Base resume not found")
+        if not resume.is_base:
+            raise HTTPException(400, "Cannot overwrite a tailored resume from Persona")
+        name = str(payload.get("name") or "").strip()
+        if name:
+            resume.name = name
+        resume.template = template
+        resume.page_format = page_format
+        resume.json_data = json_data
+        resume.updated_at = utcnow()
+        flag_modified(resume, "json_data")
+    else:
+        name = str(payload.get("name") or "").strip() or f"{json_data['header']['name']} (Base)"
+        resume = Resume(
+            name=name,
+            is_base=True,
+            parent_id=None,
+            job_id=None,
+            template=template,
+            page_format=page_format,
+            json_data=json_data,
+        )
+        db.add(resume)
+
     db.commit()
     db.refresh(resume)
     return _resume_to_dict(resume, include_json_data=True)
