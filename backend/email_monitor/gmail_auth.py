@@ -255,7 +255,18 @@ def consent_url(client_id: str, redirect_uri: str, state: str) -> str:
 def base_url(request) -> str:
     """The browser-facing origin: forwarded proto/host when a proxy sets them, else the
     request's own (Caddy passes the original Host, so localhost works as is)."""
-    proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip() or request.url.scheme
+    import os
+    env_base = (os.getenv("APP_BASE_URL") or os.getenv("GMAIL_REDIRECT_BASE_URL") or "").strip().rstrip("/")
+    if env_base:
+        return env_base
+
+    proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
+    if not proto:
+        cf_visitor = request.headers.get("cf-visitor") or ""
+        if '"scheme":"https"' in cf_visitor.replace(" ", ""):
+            proto = "https"
+    proto = proto or request.url.scheme
+
     host = ((request.headers.get("x-forwarded-host") or "").split(",")[0].strip()
             or request.headers.get("host") or request.url.netloc)
     return f"{proto}://{host}"
