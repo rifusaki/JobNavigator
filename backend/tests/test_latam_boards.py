@@ -1,4 +1,5 @@
 """LatAm boards: Get on Board's JSON API, the Computrabajo and ElEmpleo HTML pages, and the wiring."""
+import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -121,6 +122,36 @@ _ELEMPLEO_DETAIL = """
 </div>
 """
 
+# The current search page hands its own API: the request params as JSON and the
+# anti-forgery token the findbyfilter endpoint wants. The card stays in the HTML,
+# so the fallback tests read the same page.
+_ELEMPLEO_API_LISTING = """
+<div class="js-search-api-token">
+  <input name="__RequestVerificationToken" value="tok-123">
+</div>
+<div data-request-params='{"what":"desarrollador","pageIndex":1,"pageSize":20,"sortBy":"10"}'></div>
+<div class="col-md-12 result-item">
+  <div class="js-area-bind" data-ga4-offerdata='{"title":"Desarrollador","company":"Acme","location":"Medellín"}'>
+    <h2><a class="js-offer-title" href="/co/ofertas-trabajo/desarrollador-123456">Desarrollador</a></h2>
+    <span class="js-offer-company">Acme</span>
+    <span class="js-offer-city">Medellín</span>
+    <span class="js-offer-date">Hoy</span>
+    <div class="js-work-modality">Hibrido</div>
+  </div>
+</div>
+"""
+
+
+def _ee(i, info="Hoy", remote=False, hybrid=False, modality="Presencial"):
+    """One findbyfilter result item, the way the newest-first API answers."""
+    return {
+        "title": f"Desarrollador {i}", "companyName": "Acme",
+        "jobOfferUrl": f"/co/ofertas-trabajo/desarrollador-{i}?trabajo=q",
+        "city": "Bogotá", "description": "<p>Construye <b>APIs</b></p>",
+        "idworkmodalitytxt": modality, "isRemote": remote, "isHybrid": hybrid,
+        "publishDateInfo": info, "publishDate": "2026-01-01T00:00:00Z",
+    }
+
 
 @pytest.mark.asyncio
 async def test_getonbrd_lists_pages_and_maps_the_company(sites, monkeypatch):
@@ -152,6 +183,26 @@ async def test_getonbrd_drops_old_jobs(monkeypatch):
     async with job_boards.http_client() as client:
         rows = await latam._list_getonbrd(client, _search(hours_old=24), 10)
     assert rows == []
+
+
+@pytest.mark.asyncio
+async def test_getonbrd_collects_page_two_after_an_old_job_on_page_one(monkeypatch):
+    """The API sorts by relevance, so page 1 mixes old and new postings; one old
+    row must not end the walk before page 2's fresh jobs are read."""
+    monkeypatch.setattr(latam, "_GETONBRD_PAGE", 2)
+    fresh_ts = int(datetime.now(timezone.utc).timestamp())
+
+    def mixed(request):
+        page = int(request.url.params.get("page", "1"))
+        jobs = {1: [_gob(1, published=_ts("2020-01-01")), _gob(2, published=fresh_ts)],
+                2: [_gob(3, published=fresh_ts)]}.get(page, [])
+        return httpx.Response(200, json={"data": jobs, "included": []})
+
+    monkeypatch.setattr(job_boards, "http_client", lambda mounts=None: httpx.AsyncClient(
+        transport=httpx.MockTransport(mixed), follow_redirects=True))
+    async with job_boards.http_client() as client:
+        rows = await latam._list_getonbrd(client, _search(hours_old=24), 10)
+    assert [r["title"] for r in rows] == ["Backend Engineer 2", "Backend Engineer 3"]
 
 
 def test_getonbrd_country_filter_drops_other_countries():
@@ -215,6 +266,22 @@ async def test_computrabajo_relative_dates_apply_hours_old(sites):
     assert [r["title"] for r in rows] == ["Desarrollador Backend"]     # "Ayer" is older than 1 h
 
 
+def test_a_coarse_day_old_date_survives_hours_old_24():
+    """`_es_posted("Ayer")` stamps now - 24 h and too_old() reads the clock again a
+    moment later; without the drift grace, hours_old=24 always dropped "Ayer"."""
+    for text in ("Ayer", "Hace 1 día"):
+        row = job_boards.make_row(title="Analista de datos", posted=latam._es_posted(text))
+        assert job_boards.too_old(row, 24) is None
+        assert job_boards.too_old(row, 1) is not None
+
+
+@pytest.mark.asyncio
+async def test_computrabajo_keeps_ayer_at_hours_old_24(sites):
+    async with job_boards.http_client() as client:
+        rows = await latam._list_computrabajo(client, _search(hours_old=24), 10)
+    assert [r["title"] for r in rows] == ["Desarrollador Backend", "Analista de datos"]
+
+
 @pytest.mark.asyncio
 async def test_computrabajo_city_filter_is_optional(sites):
     async with job_boards.http_client() as client:
@@ -265,6 +332,131 @@ async def test_elempleo_lists_pages_and_reads_the_detail(sites):
         assert request.url.params["ciudad"] == "Medellín"
         await latam._detail_elempleo(client, rows[0])
     assert "Buscamos un desarrollador con experiencia." in rows[0]["description"]
+
+
+@pytest.mark.asyncio
+async def test_elempleo_api_sorts_newest_first_and_maps_rows(monkeypatch):
+    monkeypatch.setattr(latam, "_ELEMPLEO_PAGE_SIZE", 2)
+    posts = []
+
+    def site(request):
+        if request.method == "POST":
+            posts.append(request)
+            items = {1: [_ee(1), _ee(2, hybrid=True)], 2: [_ee(3, remote=True)]}.get(
+                json.loads(request.content)["pageIndex"], [])
+            return httpx.Response(200, json={"results": items})
+        return httpx.Response(200, text=_ELEMPLEO_API_LISTING)
+
+    monkeypatch.setattr(job_boards, "http_client", lambda mounts=None: httpx.AsyncClient(
+        transport=httpx.MockTransport(site), follow_redirects=True))
+    async with job_boards.http_client() as client:
+        rows = await latam._list_elempleo(client, _search(hours_old=24), 10)
+
+    assert [r["title"] for r in rows] == ["Desarrollador 1", "Desarrollador 2", "Desarrollador 3"]
+    first = rows[0]
+    assert first["company"] == "Acme"
+    assert first["url"] == "https://www.elempleo.com/co/ofertas-trabajo/desarrollador-1"
+    assert first["location"] == "Bogotá"
+    assert "Construye APIs" in first["description"]
+    assert [r["arrangement"] for r in rows] == ["onsite", "hybrid", "remote"]
+    # publishDateInfo ("Hoy") wins over publishDate (midnight UTC)
+    age_s = (datetime.now(timezone.utc) - datetime.fromisoformat(first["posted"])).total_seconds()
+    assert age_s < 60
+    body = json.loads(posts[0].content)
+    assert body["sortBy"] == "PublishDate_Desc" and body["sortExpression"] == "PublishDate_Desc"
+    assert body["pageIndex"] == 1 and body["pageSize"] == 2
+    assert body["what"] == "desarrollador"          # the page's own search params ride along
+    assert posts[0].headers["__RequestVerificationToken"] == "tok-123"
+    assert posts[0].headers["Content-Type"] == "application/json; charset=utf-8"
+
+
+@pytest.mark.asyncio
+async def test_elempleo_api_falls_back_to_the_html_cards_when_the_post_fails(monkeypatch):
+    def site(request):
+        if request.method == "POST":
+            return httpx.Response(500, text="boom")
+        return httpx.Response(200, text=_ELEMPLEO_API_LISTING)
+
+    monkeypatch.setattr(job_boards, "http_client", lambda mounts=None: httpx.AsyncClient(
+        transport=httpx.MockTransport(site), follow_redirects=True))
+    async with job_boards.http_client() as client:
+        rows = await latam._list_elempleo(client, _search(), 10)
+    assert [r["title"] for r in rows] == ["Desarrollador"]      # the HTML card, not a board error
+
+
+@pytest.mark.asyncio
+async def test_elempleo_api_falls_back_to_the_html_cards_when_the_post_is_not_json(monkeypatch):
+    def site(request):
+        if request.method == "POST":
+            return httpx.Response(200, text="<html>not json</html>")
+        return httpx.Response(200, text=_ELEMPLEO_API_LISTING)
+
+    monkeypatch.setattr(job_boards, "http_client", lambda mounts=None: httpx.AsyncClient(
+        transport=httpx.MockTransport(site), follow_redirects=True))
+    async with job_boards.http_client() as client:
+        rows = await latam._list_elempleo(client, _search(), 10)
+    assert [r["title"] for r in rows] == ["Desarrollador"]
+
+
+@pytest.mark.asyncio
+async def test_elempleo_api_stops_when_a_full_page_turns_old(monkeypatch):
+    monkeypatch.setattr(latam, "_ELEMPLEO_PAGE_SIZE", 2)
+    posts = []
+
+    def site(request):
+        if request.method == "POST":
+            posts.append(request)
+            items = {1: [_ee(1), _ee(2, info="Hace 2 días")],               # one old row among fresh ones
+                      2: [_ee(3, info="Hace 2 días"), _ee(4, info="Hace 2 días")]}.get(
+                json.loads(request.content)["pageIndex"], [])
+            return httpx.Response(200, json={"results": items})
+        return httpx.Response(200, text=_ELEMPLEO_API_LISTING)
+
+    monkeypatch.setattr(job_boards, "http_client", lambda mounts=None: httpx.AsyncClient(
+        transport=httpx.MockTransport(site), follow_redirects=True))
+    async with job_boards.http_client() as client:
+        rows = await latam._list_elempleo(client, _search(hours_old=24), 10)
+
+    assert [r["title"] for r in rows] == ["Desarrollador 1"]
+    # page 2 was reached (a single old row is not a stop); an all-old page after
+    # fresh ones is, so page 3 is never asked for
+    assert len(posts) == 2
+
+
+@pytest.mark.asyncio
+async def test_elempleo_api_walks_past_a_page_of_pinned_old_offers(monkeypatch):
+    monkeypatch.setattr(latam, "_ELEMPLEO_PAGE_SIZE", 2)
+
+    def site(request):
+        if request.method == "POST":
+            items = {1: [_ee(1, info="Hace 2 días"), _ee(2, info="Hace 2 días")],   # pinned, all old
+                      2: [_ee(3)]}.get(json.loads(request.content)["pageIndex"], [])  # short page, fresh
+            return httpx.Response(200, json={"results": items})
+        return httpx.Response(200, text=_ELEMPLEO_API_LISTING)
+
+    monkeypatch.setattr(job_boards, "http_client", lambda mounts=None: httpx.AsyncClient(
+        transport=httpx.MockTransport(site), follow_redirects=True))
+    async with job_boards.http_client() as client:
+        rows = await latam._list_elempleo(client, _search(hours_old=24), 10)
+    assert [r["title"] for r in rows] == ["Desarrollador 3"]
+
+
+@pytest.mark.asyncio
+async def test_elempleo_api_dedups_pinned_rows_across_pages(monkeypatch):
+    monkeypatch.setattr(latam, "_ELEMPLEO_PAGE_SIZE", 2)
+
+    def site(request):
+        if request.method == "POST":
+            items = {1: [_ee(1), _ee(2)], 2: [_ee(1), _ee(3)]}.get(
+                json.loads(request.content)["pageIndex"], [])
+            return httpx.Response(200, json={"results": items})
+        return httpx.Response(200, text=_ELEMPLEO_API_LISTING)
+
+    monkeypatch.setattr(job_boards, "http_client", lambda mounts=None: httpx.AsyncClient(
+        transport=httpx.MockTransport(site), follow_redirects=True))
+    async with job_boards.http_client() as client:
+        rows = await latam._list_elempleo(client, _search(hours_old=24), 10)
+    assert [r["title"] for r in rows] == ["Desarrollador 1", "Desarrollador 2", "Desarrollador 3"]
 
 
 @pytest.mark.asyncio

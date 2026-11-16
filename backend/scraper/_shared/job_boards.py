@@ -124,6 +124,12 @@ def make_row(**kw) -> dict:
     return base
 
 
+# A card that says "Ayer" is stamped now - 24 h, and too_old() reads the clock again
+# a moment later; without a grace those microseconds made "Ayer" older than 24 h, so
+# hours_old=24 dropped the very row it was meant to keep.
+_AGE_GRACE_H = 1 / 60          # one minute of clock drift
+
+
 def too_old(r: dict, hours_old) -> Optional[str]:
     if not hours_old or not r.get("posted"):
         return None
@@ -134,7 +140,7 @@ def too_old(r: dict, hours_old) -> Optional[str]:
     if posted.tzinfo is None:
         posted = posted.replace(tzinfo=timezone.utc)
     age_h = (datetime.now(timezone.utc) - posted).total_seconds() / 3600
-    return f"Older than {hours_old} h" if age_h > hours_old else None
+    return f"Older than {hours_old} h" if age_h > hours_old + _AGE_GRACE_H else None
 
 
 def http_client(mounts=None) -> httpx.AsyncClient:

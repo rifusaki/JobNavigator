@@ -204,9 +204,10 @@ async def _list_getonbrd(client: httpx.AsyncClient, search: Search, limit: int) 
         jobs = body.get("data") or []
         included = {i.get("id"): i for i in body.get("included") or [] if isinstance(i, dict)}
         batch = [_getonbrd_row(j, included) for j in jobs if isinstance(j, dict)]
-        fresh = [r for r in batch if not too_old(r, search.hours_old)]
-        rows += fresh
-        if len(jobs) < _GETONBRD_PAGE or len(fresh) < len(batch) or len(rows) >= limit:
+        # The API sorts by relevance, so a page mixes old and new postings; only a
+        # short page (the board's end) or the limit ends the walk.
+        rows += [r for r in batch if not too_old(r, search.hours_old)]
+        if len(jobs) < _GETONBRD_PAGE or len(rows) >= limit:
             break
     return rows[:limit]
 
@@ -292,6 +293,8 @@ async def _detail_computrabajo(client: httpx.AsyncClient, row: dict) -> None:
 # ── ElEmpleo ────────────────────────────────────────────────────────────────
 
 _ELEMPLEO = "https://www.elempleo.com"
+_ELEMPLEO_FIND = f"{_ELEMPLEO}/co/api/joboffers/findbyfilter"
+_ELEMPLEO_PAGE_SIZE = 20
 
 
 def _elempleo_data(card) -> dict:
@@ -320,24 +323,99 @@ def _elempleo_row(card, base: str) -> dict:
         posted=_es_posted(posted) or posted or None)
 
 
-async def _list_elempleo(client: httpx.AsyncClient, search: Search, limit: int) -> list:
-    term = quote_plus(term_of(search) or "empleo")
-    path = f"{_ELEMPLEO}/co/ofertas-empleo/trabajo-{term}"
-    params = {"pagina": 0}
-    city = city_of(search)
-    if city:
-        params["ciudad"] = city
+def _elempleo_api_params(html: str) -> tuple:
+    """(payload, token) the search page hands its own API, or (None, None) when the
+    page carries neither: the HTML cards are read instead."""
+    from bs4 import BeautifulSoup
+    soup = BeautifulSoup(html, "html.parser")
+    holder = soup.select_one("[data-request-params]")
+    token_input = soup.select_one('.js-search-api-token input[name="__RequestVerificationToken"]')
+    if holder is None or token_input is None:
+        return None, None
+    token = (token_input.get("value") or "").strip()
+    if not token:
+        return None, None
+    try:
+        payload = json.loads(holder.get("data-request-params") or "{}")
+    except (TypeError, ValueError):
+        return None, None
+    # An empty payload cannot carry the search; posting it would query the whole
+    # board, so the cards are the truthful fallback.
+    return (payload, token) if isinstance(payload, dict) and payload else (None, None)
+
+
+def _elempleo_api_row(item: dict) -> dict:
+    if item.get("isRemote"):
+        arrangement = REMOTE
+    elif item.get("isHybrid"):
+        arrangement = HYBRID
+    else:
+        arrangement = _arrangement(item.get("idworkmodalitytxt") or "")
+    raw_url = str(item.get("jobOfferUrl") or "").split("?")[0].strip()
+    return make_row(
+        title=item.get("title"), company=item.get("companyName"),
+        # The ?trabajo=… query changes between searches; without it the URL (and the
+        # external_id built from it) stays the same posting.
+        url=urljoin(_ELEMPLEO + "/", raw_url) if raw_url else "",
+        location=item.get("city") or "", description=html_to_text(item.get("description") or ""),
+        arrangement=arrangement,
+        # publishDate is midnight UTC, which turns "Hoy" into >24 h at night in UTC-5;
+        # publishDateInfo carries the card's own "Hoy" / "Ayer" / "Hace 2 días".
+        posted=_es_posted(item.get("publishDateInfo") or "") or _iso(item.get("publishDate")))
+
+
+async def _list_elempleo_api(client: httpx.AsyncClient, payload: dict, token: str,
+                             search: Search, limit: int) -> list | None:
+    """Newest-first pages from the search API the page hands out, or None when the
+    first page already fails (the caller reads the HTML cards instead)."""
+    rows, seen = [], set()
+    for page in range(1, _MAX_PAGES + 1):
+        resp = await client.post(_ELEMPLEO_FIND, json=dict(
+            payload, sortBy="PublishDate_Desc", sortExpression="PublishDate_Desc",
+            pageIndex=page, pageSize=_ELEMPLEO_PAGE_SIZE),
+            headers={"Content-Type": "application/json; charset=utf-8",
+                     "__RequestVerificationToken": token})
+        if resp.status_code >= 400:
+            return None if page == 1 else rows[:limit]
+        try:
+            body = resp.json()
+        except ValueError:
+            body = None
+        # Anything but the expected {"results": [...]} shape (bad JSON included) ends
+        # the API walk: page 1 falls back to the HTML cards, a later page keeps its rows.
+        if not isinstance(body, dict) or (body.get("results") is not None and not isinstance(body.get("results"), list)):
+            return None if page == 1 else rows[:limit]
+        items = body.get("results") or []
+        batch = [_elempleo_api_row(item) for item in items if isinstance(item, dict)]
+        batch = [r for r in batch if r.get("title") and r.get("url") and r["url"] not in seen]
+        seen.update(r["url"] for r in batch)
+        fresh = [r for r in batch if not too_old(r, search.hours_old)]
+        rows += fresh
+        # Newest-first: a short page is the last one, and a full page with no fresh
+        # row after fresh ones means the rest is older still. A page of only pinned
+        # offers does not stop the walk.
+        if len(rows) >= limit or len(items) < _ELEMPLEO_PAGE_SIZE or (not fresh and rows):
+            break
+    return rows[:limit]
+
+
+async def _list_elempleo_html(client: httpx.AsyncClient, path: str, params: dict,
+                              search: Search, limit: int, first_html: str | None = None) -> list:
     rows = []
     seen = set()
     for page in range(1, _MAX_PAGES + 1):
-        resp = await client.get(path, params=dict(params, pagina=page - 1))
-        # ElEmpleo answers 404 when the query has no matches, including page 1.
-        if resp.status_code == 404:
-            break
-        if resp.status_code >= 400:
-            raise BoardError(f"HTTP {resp.status_code} from ElEmpleo")
+        if page == 1 and first_html is not None:
+            html = first_html
+        else:
+            resp = await client.get(path, params=dict(params, pagina=page - 1))
+            # ElEmpleo answers 404 when the query has no matches, including page 1.
+            if resp.status_code == 404:
+                break
+            if resp.status_code >= 400:
+                raise BoardError(f"HTTP {resp.status_code} from ElEmpleo")
+            html = resp.text
         from bs4 import BeautifulSoup
-        soup = BeautifulSoup(resp.text, "html.parser")
+        soup = BeautifulSoup(html, "html.parser")
         cards = soup.select("div.result-item, article.result-item, li.result-item")
         batch = [_elempleo_row(card, _ELEMPLEO) for card in cards]
         batch = [r for r in batch if r.get("title") and r.get("url") and r["url"] not in seen]
@@ -347,6 +425,30 @@ async def _list_elempleo(client: httpx.AsyncClient, search: Search, limit: int) 
         if not cards or not batch or len(rows) >= limit:
             break
     return rows[:limit]
+
+
+async def _list_elempleo(client: httpx.AsyncClient, search: Search, limit: int) -> list:
+    term = quote_plus(term_of(search) or "empleo")
+    path = f"{_ELEMPLEO}/co/ofertas-empleo/trabajo-{term}"
+    params = {"pagina": 0}
+    city = city_of(search)
+    if city:
+        params["ciudad"] = city
+    resp = await client.get(path, params=dict(params, pagina=0))
+    # ElEmpleo answers 404 when the query has no matches, including page 1.
+    if resp.status_code == 404:
+        return []
+    if resp.status_code >= 400:
+        raise BoardError(f"HTTP {resp.status_code} from ElEmpleo")
+    # The HTML search sorts by relevance (featured first), so a month-old offer sits
+    # on page 1 while a fresh one is buried past page 5. The page hands its own API,
+    # which answers newest-first; the cards stay as the fallback.
+    payload, token = _elempleo_api_params(resp.text)
+    if payload is not None:
+        rows = await _list_elempleo_api(client, payload, token, search, limit)
+        if rows is not None:
+            return rows
+    return await _list_elempleo_html(client, path, params, search, limit, first_html=resp.text)
 
 
 async def _detail_elempleo(client: httpx.AsyncClient, row: dict) -> None:
