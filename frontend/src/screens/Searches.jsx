@@ -638,10 +638,17 @@ export default function Searches() {
     if (!errs.length) return null
     return `${errs.map((e) => `${e.label || e.source} failed (${e.error})`).join(' · ')} on the last run`
   }
-  // a failed source wins; then an error; then health's 3-run verdict; then a
-  // single clean-but-empty run
-  const warnTextOf = (s) => sourceWarnOf(s) || s.last_error || downMap[s.id]
-    || (s.last_run_warning ? 'Last run finished cleanly but returned no jobs' : null)
+  // One board returned nothing while the others delivered — the run's own row says
+  // so, before health's 3-run verdict has anything to add.
+  const emptyWarnOf = (s) => {
+    const empty = s.last_empty_sources || []
+    if (!empty.length || !s.last_jobs_found) return null
+    return `${empty.map((e) => e.label || latamLabel(e.source || e)).join(' · ')} returned nothing on the last run`
+  }
+  // a failed source wins; then an error; then health's 3-run verdict; then a board
+  // that returned nothing while others delivered; then a single clean-but-empty run
+  const warnTextOf = (s) => sourceWarnOf(s) || s.last_error || downMap[s.id] || emptyWarnOf(s)
+    || (s.last_run_warning && !s.last_jobs_found ? 'Last run finished cleanly but returned no jobs' : null)
   // A paused search or an acknowledged warning is muted on the card ("paused"),
   // not driving the ▲/amber/header/rail — the backend re-raises it once a newer run fails.
   const warnMuted = (s) => !s.active || !!s.warning_acknowledged

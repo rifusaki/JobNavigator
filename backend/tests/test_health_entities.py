@@ -144,6 +144,18 @@ def test_reason_names_every_board_quiet_across_the_whole_window(test_db):
     assert reason.endswith("in the last 3 scrapes")
 
 
+def test_reason_names_a_latam_board_with_its_label(test_db):
+    """A quiet LatAm board is named like the JobSpy ones, not by its raw key."""
+    s = Search(name="QuietGob", search_mode="latam", active=True)
+    test_db.add(s)
+    test_db.commit()
+    for i in range(3):
+        test_db.add(_quiet_log(s.id, ["getonbrd"], ago_min=i))
+    test_db.commit()
+
+    assert _reason_for("QuietGob") == "Get on Board returned nothing in the last 3 scrapes"
+
+
 def test_reason_names_no_board_when_the_quiet_one_changes(test_db):
     """Indeed, then Google, then Indeed: no board was quiet throughout.
 

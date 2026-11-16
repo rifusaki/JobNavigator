@@ -18,6 +18,15 @@ def test_orchestrator_exposes_run_company():
     assert hasattr(orchestrator, "run_company")
 
 
+def test_source_label_names_the_latam_boards():
+    """/health/entities and the Searches screen name a quiet LatAm board by its
+    label, not its raw key."""
+    from backend.scraper.orchestrator import source_label
+    assert source_label("getonbrd") == "Get on Board"
+    assert source_label("computrabajo") == "Computrabajo"
+    assert source_label("elempleo") == "ElEmpleo"
+
+
 @pytest.mark.asyncio
 async def test_run_search_dispatches_keyword(monkeypatch):
     """search_mode='keyword' routes to sources.jobspy."""

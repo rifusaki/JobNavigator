@@ -976,6 +976,19 @@ def _last_source_errors(last_log) -> list:
     ]
 
 
+def _last_empty_sources(last_log) -> list:
+    """Boards that returned no rows on the most recent run, e.g.
+    [{"source": "getonbrd", "label": "Get on Board"}] — a quiet board the run's
+    total hides while the others delivered."""
+    if last_log is None:
+        return []
+    from backend.scraper.orchestrator import empty_sources, source_label
+    return [
+        {"source": key, "label": source_label(key)}
+        for key in empty_sources(getattr(last_log, "source_breakdown", None))
+    ]
+
+
 def _search_to_dict(s: Search, last_log=None) -> dict:
     return {
         "id": str(s.id),
@@ -1014,6 +1027,9 @@ def _search_to_dict(s: Search, last_log=None) -> dict:
         # Boards that hard-failed on the last run, e.g.
         # [{"source": "zip_recruiter", "label": "ZipRecruiter", "error": "403"}]
         "last_source_errors": _last_source_errors(last_log),
+        # Boards that returned no rows on the last run while others delivered, e.g.
+        # [{"source": "getonbrd", "label": "Get on Board"}]
+        "last_empty_sources": _last_empty_sources(last_log),
         "last_jobs_found": (last_log.jobs_found if last_log else None),
         "last_new_jobs": (last_log.new_jobs if last_log else None),
         "last_duration": (last_log.duration_seconds if last_log else None),

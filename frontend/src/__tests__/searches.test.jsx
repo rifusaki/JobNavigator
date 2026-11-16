@@ -257,3 +257,22 @@ describe('Direct-link rate · Searches', () => {
     expect(screen.queryByText(/33% direct links/)).toBeNull()
   })
 })
+
+describe('Empty-board warning · Searches', () => {
+  beforeEach(() => { vi.clearAllMocks(); sessionStorage.clear() })
+
+  it('names the board that returned nothing while the others delivered', async () => {
+    mockApi([{ ...SEARCH, id: 's9', name: 'LatAm', search_mode: 'latam', sources: ['getonbrd', 'elempleo'],
+      last_run_warning: true, last_jobs_found: 24, last_new_jobs: 3,
+      last_empty_sources: [{ source: 'getonbrd', label: 'Get on Board' }] }])
+    renderScreen()
+    expect(await screen.findByText('Get on Board returned nothing on the last run')).toBeTruthy()
+    expect(screen.queryByText('Last run finished cleanly but returned no jobs')).toBeNull()
+  })
+
+  it('keeps the clean-but-empty wording when no jobs came back', async () => {
+    mockApi([{ ...SEARCH, id: 's10', name: 'Quiet', last_run_warning: true, last_jobs_found: 0, last_empty_sources: [] }])
+    renderScreen()
+    expect(await screen.findByText('Last run finished cleanly but returned no jobs')).toBeTruthy()
+  })
+})

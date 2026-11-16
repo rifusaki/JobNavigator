@@ -538,6 +538,37 @@ def test_search_dict_exposes_last_source_errors(test_db):
     ]
 
 
+def test_search_dict_exposes_last_empty_sources(test_db):
+    """A board that returned nothing while the others delivered is its own warning,
+    so the Searches screen can say which board was quiet instead of "no jobs"."""
+    from backend.api.routes_searches import _search_to_dict
+
+    search = _search(test_db, ["getonbrd", "elempleo"])
+    log = ScrapeLog(search_id=search.id, source="latam", jobs_found=24, new_jobs=3,
+                    is_warning=True, duration_seconds=1.0,
+                    source_breakdown={"getonbrd": {"seen": 0, "new": 0, "returned": 0},
+                                      "elempleo": {"seen": 24, "new": 3, "returned": 24}})
+    test_db.add(log)
+    test_db.commit()
+
+    d = _search_to_dict(search, last_log=log)
+    assert d["last_empty_sources"] == [{"source": "getonbrd", "label": "Get on Board"}]
+
+
+def test_search_dict_has_no_empty_sources_without_evidence(test_db):
+    """A row an older build wrote carries no `returned` count, so it names no board."""
+    from backend.api.routes_searches import _search_to_dict
+
+    search = _search(test_db, ["indeed"])
+    log = ScrapeLog(search_id=search.id, source="jobspy", jobs_found=9, new_jobs=0,
+                    is_warning=True, duration_seconds=1.0,
+                    source_breakdown={"indeed": {"seen": 9, "new": 0}})
+    test_db.add(log)
+    test_db.commit()
+
+    assert _search_to_dict(search, last_log=log)["last_empty_sources"] == []
+
+
 def test_scrape_log_endpoint_serializes_source_breakdown(test_db, api_client):
     """The run-history endpoint has to carry the per-board outcome — a populated row is still useless if the endpoint drops the column on the way out."""
     _first_run_auth(test_db)
