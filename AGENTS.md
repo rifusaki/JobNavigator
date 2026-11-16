@@ -20,6 +20,13 @@ This repository is a fork of **`JobNavigator`** (`vesaias/JobNavigator`) extende
      - Tailoring diffing (`frontend/src/screens/ResumeEditor.jsx` - `stk:${cat}`).
      - Shared section editors (`frontend/src/screens/ResumeSections.jsx` - `SkillsEditor`, `CertificationsEditor`, `LanguagesEditor`).
      - Template rendering with Jinja2 list formatting across all 10 templates (`backend/resume_templates/`).
+6. **Base Résumé Generation from Persona (`POST /api/resumes/from-persona`):**
+   * One-click synthesis of a complete, export-ready Base résumé from Persona's `contact` and `resume_content`.
+   * Reconstructs full header contact items (city/country, `mailto:` email, phone, LinkedIn, GitHub, portfolio).
+   * UI actions: `Create Base Résumé ↓` button in `frontend/src/screens/Persona.jsx` and `From Persona` button in `frontend/src/screens/Resumes.jsx` creation modal.
+7. **Reverse Proxy & HTTPS Forwarding for Google OAuth:**
+   * Caddy reverse proxy hardening (`trusted_proxies 0.0.0.0/0` in `Caddyfile`) preserving `X-Forwarded-Proto: https` from Cloudflare.
+   * Defensive scheme resolution in `backend/email_monitor/gmail_auth.py` (`APP_BASE_URL`, `GMAIL_REDIRECT_BASE_URL`, and Cloudflare `cf-visitor` detection) ensuring sensitive scopes (`gmail.readonly`) receive strict `https://` callback URIs (`https://laburo.rifusaki.com/api/gmail/callback`).
 
 * **Development host:** macOS (`/Users/rifusaki/localRepos/personal/JobNavigator`).
 * **Execution host:** Windows home server accessible via `ssh 360` running Docker Compose.
@@ -73,6 +80,27 @@ cd frontend && npm test -- --run
 
 When deploying or testing on the Windows home server via `ssh 360`:
 * Ensure `.env` has `JN_TELEMETRY=off`.
-* After modifying backend `.py` files: `docker compose restart backend`.
-* After modifying `frontend/` files (bypass credential helper via `DOCKER_CONFIG`):
+* **Backend `.py` edits only:** `docker compose restart backend`.
+* **`.env` or `docker-compose.yml` changes:** `docker compose up -d --no-deps backend` (Note: `docker compose restart` does NOT reload `.env`, container recreation is required).
+* **`Caddyfile` updates:** `docker compose exec -T caddy caddy reload --config /etc/caddy/Caddyfile`.
+* **Frontend updates (bypass Windows desktop credential helper via `DOCKER_CONFIG`):**
   `DOCKER_CONFIG=/tmp/empty_docker docker compose up -d --build --no-deps frontend`.
+
+---
+
+## 4. Production Environment & Live Account Reference (`ssh 360`)
+
+* **Execution Host:** Windows Home Server via `ssh 360` in WSL2 at `/root/JobNavigator`.
+* **Public Domain:** `https://laburo.rifusaki.com` (Cloudflare Proxy/Tunnel → Caddy `:80`/`:443` → `backend:8000` / `frontend:80`).
+* **Active User Account:** `51ba8886-b0cd-4677-a0b5-77f0f9d85948` (username `rifusaki`).
+* **Active Persona:** ID `1` containing full verified profile:
+  - Contact: Martina García Mejía (`Bogotá, Colombia`, `martina@rifusaki.com`, `(+57) 316 577 8264`, LinkedIn, GitHub).
+  - 4 Experience roles: Intwo, Concentrix, REDai UNAL, Livingston Research.
+  - 5 Stack categories: Lenguajes, Datos y ML, Cloud e infraestructura, Desarrollo, Geoespacial.
+  - 5 Capacidades categories: Ingeniería de datos, Análisis y modelado, Machine learning, Computación científica, Comunicación técnica.
+  - 7 Certifications: Ada | Mercado Libre, IBM (x4), U of Toronto, U of Michigan.
+  - 3 Languages: Español (Nativo), Inglés (Profesional), Francés (Básico).
+* **Official Base Résumé:** `2611 CV es priv (Base)` (`f4a4137b-8784-4e70-816c-cb492a7ad09d`) using template `rifusaki_es` and `letter` format.
+* **Google OAuth 2.0 Credentials:**
+  - Scope: Sensitive (`https://www.googleapis.com/auth/gmail.readonly`).
+  - Authorized Redirect URI in Google Cloud Console: `https://laburo.rifusaki.com/api/gmail/callback`.
